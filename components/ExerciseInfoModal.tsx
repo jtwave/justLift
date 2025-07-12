@@ -1,10 +1,10 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Modal, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
   ScrollView,
   Image,
   Dimensions
@@ -13,8 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { X, Target, Zap, Settings, Dumbbell, FileMusic as Muscle, CreditCard as Edit3, Save, CircleAlert as AlertCircle } from 'lucide-react-native';
+
+// Add this interface definition
+interface ExerciseInfoModalProps {
+  visible: boolean; // You're using 'visible' in the component, so it should be a prop
   onClose: () => void;
-  exercise: any;
+  exercise: any; // Consider defining a more specific type for 'exercise' later
 }
 
 const { width } = Dimensions.get('window');
@@ -24,7 +28,7 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
 
   const renderMuscleList = (muscles: string[] | null, title: string, icon: React.ReactNode) => {
     if (!muscles || muscles.length === 0) return null;
-    
+
     return (
       <View style={styles.infoSection}>
         <View style={styles.sectionHeader}>
@@ -44,7 +48,7 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
 
   const renderInfoItem = (label: string, value: string | null, icon: React.ReactNode) => {
     if (!value) return null;
-    
+
     return (
       <View style={styles.infoItem}>
         <View style={styles.infoItemHeader}>
@@ -85,16 +89,16 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
           {(exercise.image_url_1 || exercise.image_url_2) && (
             <View style={styles.imagesSection}>
               <Text style={styles.sectionTitle}>Exercise Images</Text>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 style={styles.imagesContainer}
                 contentContainerStyle={styles.imagesContent}
               >
                 {exercise.image_url_1 && (
                   <View style={styles.imageContainer}>
-                    <Image 
-                      source={{ uri: exercise.image_url_1 }} 
+                    <Image
+                      source={{ uri: exercise.image_url_1 }}
                       style={styles.exerciseImage}
                       resizeMode="cover"
                       cache="force-cache"
@@ -104,11 +108,11 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
                 )}
                 {exercise.image_url_2 && (
                   <View style={styles.imageContainer}>
-                    <Image 
-                      source={{ uri: exercise.image_url_2 }} 
+                    <Image
+                      source={{ uri: exercise.image_url_2 }}
                       style={styles.exerciseImage}
                       resizeMode="cover"
-                       cache="force-cache"
+                        cache="force-cache"
                     />
                     <Text style={styles.imageLabel}>Position 2</Text>
                   </View>
@@ -127,15 +131,15 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
 
           {/* Muscle Groups */}
           {renderMuscleList(
-            exercise.primaryMuscles, 
-            'Primary Muscles', 
+            exercise.primaryMuscles,
+            'Primary Muscles',
             <Muscle size={16} color={Colors.accent} />
           )}
-          
+
           {exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0 && (
             renderMuscleList(
-              exercise.secondaryMuscles, 
-              'Secondary Muscles', 
+              exercise.secondaryMuscles,
+              'Secondary Muscles',
               <Muscle size={16} color={Colors.secondary} />
             )
           )}
