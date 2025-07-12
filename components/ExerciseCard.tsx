@@ -429,6 +429,7 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
             style={styles.headerButton}
             onPress={() => setShowExerciseInfo(true)}
           >
+            <Info size={20} color={Colors.accent} />
           </TouchableOpacity>
           {onDeleteExercise && (
             <TouchableOpacity 
