@@ -30,6 +30,8 @@ interface PostMediaItem {
 
 const WorkoutPostCard = ({ post }: { post: any }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   const formatWorkoutDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -84,19 +86,48 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
     if (item.type === 'media') {
       return (
         <View style={styles.mediaContainer}>
+          {imageLoading && (
+            <View style={styles.imageLoadingContainer}>
+              <View style={styles.loadingSpinner}>
+                <Text style={styles.loadingDots}>●●●</Text>
+              </View>
+              <Text style={styles.imageLoadingText}>Loading image...</Text>
+            </View>
+          )}
+          {imageError && (
+            <View style={styles.imageErrorContainer}>
+              <Text style={styles.imageErrorText}>Image unavailable</Text>
+            </View>
+          )}
           {item.data.type === 'photo' ? (
             <Image 
               source={{ uri: item.data.url }} 
               style={styles.workoutMedia}
               resizeMode="cover"
-              cache="force-cache"
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => {
+                setImageLoading(false);
+                setImageError(false);
+              }}
+              onError={() => {
+                setImageLoading(false);
+                setImageError(true);
+              }}
             />
           ) : (
             <Image 
               source={{ uri: item.data.url }} 
               style={styles.workoutMedia}
               resizeMode="cover"
-              cache="force-cache"
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => {
+                setImageLoading(false);
+                setImageError(false);
+              }}
+              onError={() => {
+                setImageLoading(false);
+                setImageError(true);
+              }}
             />
           )}
         </View>
@@ -687,6 +718,44 @@ const styles = StyleSheet.create({
   workoutMedia: {
     width: '100%',
     height: '100%',
+  },
+  imageLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    zIndex: 1,
+  },
+  loadingSpinner: {
+    marginBottom: 8,
+  },
+  loadingDots: {
+    fontSize: 24,
+    color: Colors.accent,
+    letterSpacing: 4,
+  },
+  imageLoadingText: {
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
+  },
+  imageErrorContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    zIndex: 1,
+  },
+  imageErrorText: {
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
   },
   videoContainer: {
     position: 'relative',

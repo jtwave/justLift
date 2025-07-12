@@ -26,6 +26,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showOptions, setShowOptions] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   const formatWorkoutDuration = (startTime: string, endTime: string | null) => {
     if (!endTime) return 'In progress';
@@ -82,8 +83,15 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
         <View style={styles.mediaContainer}>
           {imageLoading && (
             <View style={styles.imageLoadingContainer}>
-              <ActivityIndicator size="large" color={Colors.accent} />
+              <View style={styles.loadingSpinner}>
+                <Text style={styles.loadingDots}>●●●</Text>
+              </View>
               <Text style={styles.imageLoadingText}>Loading image...</Text>
+            </View>
+          )}
+          {imageError && (
+            <View style={styles.imageErrorContainer}>
+              <Text style={styles.imageErrorText}>Image unavailable</Text>
             </View>
           )}
           {item.data.type === 'photo' ? (
@@ -92,9 +100,14 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
               style={styles.postMedia}
               resizeMode="cover"
               onLoadStart={() => setImageLoading(true)}
-              onLoadEnd={() => setImageLoading(false)}
-              onError={() => setImageLoading(false)}
-              cache="force-cache"
+              onLoadEnd={() => {
+                setImageLoading(false);
+                setImageError(false);
+              }}
+              onError={() => {
+                setImageLoading(false);
+                setImageError(true);
+              }}
             />
           ) : (
             <Image 
@@ -102,9 +115,14 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
               style={styles.postMedia}
               resizeMode="cover"
               onLoadStart={() => setImageLoading(true)}
-              onLoadEnd={() => setImageLoading(false)}
-              onError={() => setImageLoading(false)}
-              cache="force-cache"
+              onLoadEnd={() => {
+                setImageLoading(false);
+                setImageError(false);
+              }}
+              onError={() => {
+                setImageLoading(false);
+                setImageError(true);
+              }}
             />
           )}
         </View>
@@ -583,10 +601,32 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cardBackground,
     zIndex: 1,
   },
+  loadingSpinner: {
+    marginBottom: 8,
+  },
+  loadingDots: {
+    fontSize: 24,
+    color: Colors.accent,
+    letterSpacing: 4,
+  },
   imageLoadingText: {
     fontSize: FontSizes.body,
     color: Colors.secondary,
-    marginTop: 8,
+  },
+  imageErrorContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    zIndex: 1,
+  },
+  imageErrorText: {
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
   },
   videoContainer: {
     position: 'relative',
