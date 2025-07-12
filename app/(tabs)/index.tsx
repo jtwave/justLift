@@ -25,6 +25,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showOptions, setShowOptions] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
 
   const formatWorkoutDuration = (startTime: string, endTime: string | null) => {
     if (!endTime) return 'In progress';
@@ -79,22 +80,31 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
     if (item.type === 'media') {
       return (
         <View style={styles.mediaContainer}>
+          {imageLoading && (
+            <View style={styles.imageLoadingContainer}>
+              <ActivityIndicator size="large" color={Colors.accent} />
+              <Text style={styles.imageLoadingText}>Loading image...</Text>
+            </View>
+          )}
           {item.data.type === 'photo' ? (
             <Image 
               source={{ uri: item.data.url }} 
               style={styles.postMedia}
               resizeMode="cover"
-              // Performance optimizations for images
-              loadingIndicatorSource={{ uri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' }}
-              fadeDuration={200}
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => setImageLoading(false)}
+              onError={() => setImageLoading(false)}
+              cache="force-cache"
             />
           ) : (
             <Image 
               source={{ uri: item.data.url }} 
               style={styles.postMedia}
               resizeMode="cover"
-              loadingIndicatorSource={{ uri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' }}
-              fadeDuration={200}
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => setImageLoading(false)}
+              onError={() => setImageLoading(false)}
+              cache="force-cache"
             />
           )}
         </View>
@@ -561,6 +571,22 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: Colors.cardBackground,
+  },
+  imageLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    zIndex: 1,
+  },
+  imageLoadingText: {
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
+    marginTop: 8,
   },
   videoContainer: {
     position: 'relative',
