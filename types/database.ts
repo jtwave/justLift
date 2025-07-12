@@ -161,6 +161,7 @@ export interface Database {
           default_duration: number
           supports_distance: boolean
           supports_calories: boolean
+          user_notes: string | null
         }
         Insert: {
           id?: string
@@ -180,6 +181,7 @@ export interface Database {
           default_duration?: number
           supports_distance?: boolean
           supports_calories?: boolean
+          user_notes?: string | null
         }
         Update: {
           id?: string
@@ -199,6 +201,7 @@ export interface Database {
           default_duration?: number
           supports_distance?: boolean
           supports_calories?: boolean
+          user_notes?: string | null
         }
       }
       workouts: {

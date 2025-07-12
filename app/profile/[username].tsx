@@ -89,12 +89,14 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
               source={{ uri: item.data.url }} 
               style={styles.workoutMedia}
               resizeMode="cover"
+              cache="force-cache"
             />
           ) : (
             <Image 
               source={{ uri: item.data.url }} 
               style={styles.workoutMedia}
               resizeMode="cover"
+              cache="force-cache"
             />
           )}
         </View>

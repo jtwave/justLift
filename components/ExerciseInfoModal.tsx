@@ -100,6 +100,7 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
                       source={{ uri: exercise.image_url_1 }} 
                       style={styles.exerciseImage}
                       resizeMode="cover"
+                      cache="force-cache"
                     />
                     <Text style={styles.imageLabel}>Position 1</Text>
                   </View>
@@ -110,6 +111,7 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
                       source={{ uri: exercise.image_url_2 }} 
                       style={styles.exerciseImage}
                       resizeMode="cover"
+                       cache="force-cache"
                     />
                     <Text style={styles.imageLabel}>Position 2</Text>
                   </View>
@@ -133,10 +135,12 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
             <Muscle size={16} color={Colors.accent} />
           )}
           
-          {renderMuscleList(
-            exercise.secondaryMuscles, 
-            'Secondary Muscles', 
-            <Muscle size={16} color={Colors.secondary} />
+          {exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0 && (
+            renderMuscleList(
+              exercise.secondaryMuscles, 
+              'Secondary Muscles', 
+              <Muscle size={16} color={Colors.secondary} />
+            )
           )}
 
           {/* Instructions */}
