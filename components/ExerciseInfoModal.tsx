@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
-import { X, Target, Zaimport { X, Target, Zap, Settings, Dumbbell, FileMusic as Muscle, CreditCard as Edit3, Save, CircleAlert as AlertCircle } from 'lucide-react-native' boolean;
+import { X, Target, Zap, Settings, Dumbbell, FileMusic as Muscle, CreditCard as Edit3, Save, CircleAlert as AlertCircle } from 'lucide-react-native';
   onClose: () => void;
   exercise: any;
 }
