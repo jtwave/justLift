@@ -50,8 +50,6 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
   
   // Simple manual time input
   const [timeInput, setTimeInput] = useState('0:00');
-  const [exerciseNotes, setExerciseNotes] = useState('');
-  const [showNotesInput, setShowNotesInput] = useState(false);
 
   const adjustWeight = (adjustment: number) => {
     const currentWeight = parseFloat(weight) || 0;
@@ -131,11 +129,6 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
     const seconds = duration % 60;
     setTimeInput(`${minutes}:${seconds.toString().padStart(2, '0')}`);
   }, []);
-
-  // Load exercise notes
-  React.useEffect(() => {
-    setExerciseNotes(exercise.exercise.user_notes || '');
-  }, [exercise.exercise.user_notes]);
 
   const handleTimerComplete = () => {
     // Auto-log the set when timer completes for time-only exercises
@@ -430,9 +423,6 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
       <View style={styles.exerciseHeader}>
         <View style={styles.exerciseHeaderLeft}>
           <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
-          {exerciseNotes && (
-            <Text style={styles.exerciseNotes}>{exerciseNotes}</Text>
-          )}
         </View>
         <View style={styles.exerciseHeaderRight}>
           <TouchableOpacity 
@@ -445,7 +435,8 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
             <TouchableOpacity 
               style={styles.headerButton}
               onPress={handleDeleteExercise}
-            >
+                const { updateExerciseNotes } = useWorkoutStore.getState();
+                updateExerciseNotes(exercise.exercise.id, exerciseNotes);
               <Trash2 size={20} color={Colors.error} />
             </TouchableOpacity>
           )}
@@ -492,41 +483,6 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
         </TouchableOpacity>
       </View>
       
-      {/* Exercise Notes Section */}
-      <View style={styles.notesSection}>
-        <TouchableOpacity 
-          style={styles.notesToggle}
-          onPress={() => setShowNotesInput(!showNotesInput)}
-        >
-          <Text style={styles.notesToggleText}>
-            {showNotesInput ? 'Hide Notes' : 'Add Exercise Notes'}
-          </Text>
-        </TouchableOpacity>
-        
-        {showNotesInput && (
-          <View style={styles.notesInputContainer}>
-            <TextInput
-              style={styles.notesInput}
-              value={exerciseNotes}
-              onChangeText={setExerciseNotes}
-              placeholder="Add notes about this exercise (form cues, weight progression, etc.)"
-              placeholderTextColor={Colors.secondary}
-              multiline
-              numberOfLines={3}
-            />
-            <TouchableOpacity 
-              style={styles.saveNotesButton}
-              onPress={() => {
-                // TODO: Save notes to database
-                setShowNotesInput(false);
-              }}
-            >
-              <Text style={styles.saveNotesButtonText}>Save Notes</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-      
       <ExerciseInfoModal
         visible={showExerciseInfo}
         onClose={() => setShowExerciseInfo(false)}
@@ -561,13 +517,6 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sectionHeader,
     fontWeight: FontWeights.semibold,
     color: Colors.primary,
-  },
-  exerciseNotes: {
-    fontSize: FontSizes.body,
-    color: Colors.secondary,
-    fontStyle: 'italic',
-    marginTop: 4,
-    lineHeight: 20,
   },
   headerButton: {
     padding: 8,
@@ -745,44 +694,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     textAlign: 'center',
     minWidth: 80,
-  },
-  notesSection: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.divider,
-  },
-  notesToggle: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  notesToggleText: {
-    fontSize: FontSizes.body,
-    color: Colors.accent,
-    fontWeight: FontWeights.medium,
-  },
-  notesInputContainer: {
-    marginTop: 12,
-  },
-  notesInput: {
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: FontSizes.body,
-    color: Colors.primary,
-    textAlignVertical: 'top',
-    minHeight: 80,
-    marginBottom: 12,
-  },
-  saveNotesButton: {
-    backgroundColor: Colors.accent,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  saveNotesButtonText: {
-    fontSize: FontSizes.body,
-    fontWeight: FontWeights.medium,
-    color: Colors.primary,
-  },
+  }
 });

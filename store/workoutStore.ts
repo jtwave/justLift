@@ -44,6 +44,7 @@ interface WorkoutStore {
   updateWorkoutDetails: (workoutId: string, name: string, description?: string) => Promise<void>;
   discardWorkout: (workoutId: string) => Promise<void>;
   deleteWorkoutSet: (setId: string) => Promise<void>;
+  updateExerciseNotes: (exerciseId: string, notes: string) => Promise<void>;
 }
 
 // Calculate estimated 1RM using Epley formula
@@ -632,6 +633,51 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     } catch (error) {
       console.error('Error discarding workout:', error);
       console.error('Error updating workout details:', error);
+      set({ error: (error as Error).message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  updateExerciseNotes: async (exerciseId: string, notes: string) => {
+    try {
+      set({ loading: true, error: null });
+
+      const { error } = await supabase
+        .from('exercises')
+        .update({ user_notes: notes.trim() || null })
+        .eq('id', exerciseId);
+
+      if (error) throw error;
+
+      // Update local state
+      const { exercises, currentWorkout } = get();
+      
+      // Update exercises list
+      const updatedExercises = exercises.map(ex => 
+        ex.id === exerciseId 
+          ? { ...ex, user_notes: notes.trim() || null }
+          : ex
+      );
+      
+      // Update current workout if it contains this exercise
+      let updatedCurrentWorkout = currentWorkout;
+      if (currentWorkout) {
+        updatedCurrentWorkout = {
+          ...currentWorkout,
+          exercises: currentWorkout.exercises.map(we => 
+            we.exercise_id === exerciseId
+              ? { ...we, exercise: { ...we.exercise, user_notes: notes.trim() || null } }
+              : we
+          )
+        };
+      }
+      
+      set({ 
+        exercises: updatedExercises,
+        currentWorkout: updatedCurrentWorkout
+      });
+    } catch (error) {
       set({ error: (error as Error).message });
     } finally {
       set({ loading: false });
