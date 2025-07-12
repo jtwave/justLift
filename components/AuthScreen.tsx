@@ -36,7 +36,7 @@ export function AuthScreen() {
 
   const handleAuth = async () => {
     setErrorMessage('');
-    
+
     if (!emailOrUsername || !password) {
       setErrorMessage('Please fill in all fields');
       return;
@@ -99,12 +99,12 @@ export function AuthScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -112,7 +112,10 @@ export function AuthScreen() {
         >
           <View style={styles.content}>
             <View style={styles.header}>
-              <Text style={styles.title}>Lift</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={[styles.title, { color: colors.accent }]}>Lift</Text>
+                <Text style={[styles.title, { color: colors.primary, marginLeft: 4 }]}>Buddies</Text>
+              </View>
               <Text style={styles.subtitle}>
                 {isSignUp ? 'Create your account' : 'Welcome back'}
               </Text>
@@ -210,8 +213,8 @@ export function AuthScreen() {
                 onPress={handleModeSwitch}
               >
                 <Text style={[styles.switchButtonText, { color: colors.accent }]}>
-                  {isSignUp 
-                    ? 'Already have an account? Sign In' 
+                  {isSignUp
+                    ? 'Already have an account? Sign In'
                     : "Don't have an account? Sign Up"
                   }
                 </Text>

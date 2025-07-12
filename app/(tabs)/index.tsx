@@ -17,8 +17,8 @@ interface PostMediaItem {
   data?: any;
 }
 
-const PostCard = ({ post, onLike, onDelete, currentUserId }: { 
-  post: any; 
+const PostCard = ({ post, onLike, onDelete, currentUserId }: {
+  post: any;
   onLike: (postId: string, isLiked: boolean) => void;
   onDelete: (postId: string) => void;
   currentUserId: string;
@@ -38,7 +38,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
     const now = new Date();
     const date = new Date(dateString);
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -47,19 +47,19 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
   };
 
   const getTotalSets = (exercises: any[]) => {
-    return exercises.reduce((total, exercise) => 
+    return exercises.reduce((total, exercise) =>
       total + exercise.sets.filter((set: any) => set.completed).length, 0);
   };
 
   const getTotalVolume = (exercises: any[]) => {
-    return exercises.reduce((total, exercise) => 
-      total + exercise.sets.reduce((setTotal: number, set: any) => 
+    return exercises.reduce((total, exercise) =>
+      total + exercise.sets.reduce((setTotal: number, set: any) =>
         setTotal + (set.completed ? set.weight * set.reps : 0), 0), 0);
   };
 
   // Create swipeable items array
   const swipeableItems: PostMediaItem[] = [];
-  
+
   // Add media if present
   if (post.media_url) {
     swipeableItems.push({
@@ -70,7 +70,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
       }
     });
   }
-  
+
   // Always add workout details as the last item
   swipeableItems.push({
     type: 'workout',
@@ -95,8 +95,8 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
             </View>
           )}
           {item.data.type === 'photo' ? (
-            <Image 
-              source={{ uri: item.data.url }} 
+            <Image
+              source={{ uri: item.data.url }}
               style={styles.postMedia}
               resizeMode="cover"
               onLoadStart={() => setImageLoading(true)}
@@ -110,8 +110,8 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
               }}
             />
           ) : (
-            <Image 
-              source={{ uri: item.data.url }} 
+            <Image
+              source={{ uri: item.data.url }}
               style={styles.postMedia}
               resizeMode="cover"
               onLoadStart={() => setImageLoading(true)}
@@ -185,7 +185,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
     <View style={styles.postCard}>
       {/* Post Header */}
       <View style={styles.postHeader}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.userInfo}
           onPress={() => router.push(`/profile/${post.user.username}`)}
         >
@@ -204,7 +204,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
         <View style={styles.postHeaderRight}>
           <Text style={styles.timeAgo}>{formatTimeAgo(post.created_at)}</Text>
           {post.user_id === currentUserId && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.optionsButton}
               onPress={() => setShowOptions(!showOptions)}
             >
@@ -217,7 +217,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
       {/* Options Menu */}
       {showOptions && post.user_id === currentUserId && (
         <View style={styles.optionsMenu}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.optionItem}
             onPress={() => {
               setShowOptions(false);
@@ -226,8 +226,8 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
                 'Are you sure you want to delete this workout post?',
                 [
                   { text: 'Cancel', style: 'cancel' },
-                  { 
-                    text: 'Delete', 
+                  {
+                    text: 'Delete',
                     style: 'destructive',
                     onPress: () => onDelete(post.id)
                   }
@@ -256,7 +256,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
           }}
           style={styles.swipeableList}
         />
-        
+
         {/* Page Indicators */}
         {swipeableItems.length > 1 && (
           <View style={styles.pageIndicators}>
@@ -276,12 +276,12 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
       {/* Caption */}
       {/* Actions */}
       <View style={styles.actions}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
           onPress={() => onLike(post.id, post.is_liked)}
         >
-          <Heart 
-            size={20} 
+          <Heart
+            size={20}
             color={post.is_liked ? Colors.error : Colors.secondary}
             fill={post.is_liked ? Colors.error : 'none'}
           />
@@ -293,7 +293,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
           onPress={() => router.push(`/post/${post.id}/comments`)}
         >
@@ -334,15 +334,15 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
 };
 
 export default function HomeScreen() {
-  const { 
-    feedPosts, 
-    feedLoading, 
-    loadFeed, 
-    likePost, 
+  const {
+    feedPosts,
+    feedLoading,
+    loadFeed,
+    likePost,
     unlikePost,
     deleteWorkoutPost
   } = useSocialStore();
-  
+
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -376,9 +376,12 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Lift</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={[styles.headerTitle, { color: Colors.accent }]}>Lift</Text>
+          <Text style={[styles.headerTitle, { color: Colors.primary, marginLeft: 4 }]}>Buddies</Text>
+        </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerButton}
             onPress={() => router.push('/search')}
           >
@@ -387,8 +390,8 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT }}
         refreshControl={
@@ -402,7 +405,7 @@ export default function HomeScreen() {
             <Text style={styles.emptyStateText}>
               Follow other lifters to see their workouts in your feed, or start your first workout to share your progress!
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.startWorkoutButton}
               onPress={() => router.push('/workout/active')}
             >
@@ -411,9 +414,9 @@ export default function HomeScreen() {
           </View>
         ) : (
           feedPosts.map((post) => (
-            <PostCard 
-              key={post.id} 
-              post={post} 
+            <PostCard
+              key={post.id}
+              post={post}
               onLike={handleLike}
               onDelete={handleDeletePost}
               currentUserId={user?.id || ''}
