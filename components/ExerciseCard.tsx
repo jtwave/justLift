@@ -423,6 +423,9 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
       <View style={styles.exerciseHeader}>
         <View style={styles.exerciseHeaderLeft}>
           <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
+          {exercise.exercise.user_notes && (
+            <Text style={styles.exerciseNotes}>{exercise.exercise.user_notes}</Text>
+          )}
         </View>
         <View style={styles.exerciseHeaderRight}>
           <TouchableOpacity 
@@ -516,6 +519,13 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sectionHeader,
     fontWeight: FontWeights.semibold,
     color: Colors.primary,
+  },
+  exerciseNotes: {
+    fontSize: FontSizes.body,
+    color: Colors.accent,
+    fontStyle: 'italic',
+    marginTop: 4,
+    lineHeight: 20,
   },
   headerButton: {
     padding: 8,
