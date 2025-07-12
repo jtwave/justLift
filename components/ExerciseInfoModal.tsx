@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 // Add import for ImageViewer
 import ImageViewer from 'react-native-image-zoom-viewer';
+import { useWorkoutStore } from '@/store/workoutStore';
 
 // Interface for the component's props
 interface ExerciseInfoModalProps {
@@ -35,6 +36,7 @@ const { width } = Dimensions.get('window');
 export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoModalProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const loadCurrentWorkout = useWorkoutStore(state => state.loadCurrentWorkout);
   const [note, setNote] = useState('');
   const [noteId, setNoteId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -116,6 +118,8 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
 
       setMessage('Note saved!');
       setEditing(false);
+      // Reload workout so notes appear in card
+      await loadCurrentWorkout();
     } catch (error) {
       setMessage('Failed to save note.');
       console.error("Error saving note:", error);

@@ -129,13 +129,17 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
       console.log('Loading current workout for user:', user.user.id);
 
+      // Join exercise_notes for the current user
       const { data: workouts, error } = await supabase
         .from('workouts')
         .select(`
           *,
           workout_exercises (
             *,
-            exercise:exercises (*),
+            exercise:exercises (
+              *,
+              exercise_notes(user_id, notes)
+            ),
             workout_sets (*)
           )
         `)
@@ -155,29 +159,22 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         const workout = workouts[0];
         console.log('Processing workout:', workout.id, workout.name);
 
+        // Map user_note from exercise_note for each exercise
         const formattedWorkout = {
           ...workout,
-          exercises: workout.workout_exercises.map(we => ({
+          exercises: workout.workout_exercises.map((we: any) => ({
             ...we,
-            sets: we.workout_sets.sort((a, b) => a.set_number - b.set_number)
-          })).sort((a, b) => a.order_index - b.order_index)
+            user_note: we.exercise.exercise_notes?.find((n: any) => n.user_id === user.user.id)?.notes || null,
+            sets: we.workout_sets.sort((a: any, b: any) => a.set_number - b.set_number)
+          })).sort((a: any, b: any) => a.order_index - b.order_index)
         };
-
-        console.log('Formatted workout exercises:', formattedWorkout.exercises.map(ex => ({
-          id: ex.id,
-          name: ex.exercise.name,
-          rest_time: ex.rest_time,
-          is_active: ex.is_active
-        })));
 
         set({ currentWorkout: formattedWorkout });
       } else {
-        console.log('No active workout found');
         set({ currentWorkout: null });
       }
       console.log('=== LOAD CURRENT WORKOUT END ===');
     } catch (error) {
-      console.error('Error in loadCurrentWorkout:', error);
       set({ error: (error as Error).message });
     } finally {
       set({ loading: false });

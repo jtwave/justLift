@@ -53,10 +53,11 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
   const [selectedMedia, setSelectedMedia] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'photo' | 'video' | null>(null);
   const [visibility, setVisibility] = useState<'everyone' | 'friends' | 'private'>('everyone');
+  const [showVisibilityModal, setShowVisibilityModal] = useState(false);
 
   const { saveWorkoutAsRoutine } = useWorkoutStore();
   const { updateWorkoutDetails, discardWorkout, loadCurrentWorkout } = useWorkoutStore();
-  const { createWorkoutPost, createWorkoutPostWithMedia } = useSocialStore();
+  const { createWorkoutPost, createWorkoutPostWithMedia, loadWorkoutPost, deleteWorkoutPost } = useSocialStore();
   const { addProgressPhoto } = useProgressStore();
 
   // Update workout title when workout data changes
@@ -177,7 +178,8 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
       console.log('Saving workout with details:', {
         workoutId: workout.id,
         title: workoutTitle.trim(),
-        description: workoutDescription.trim()
+        description: workoutDescription.trim(),
+        visibility: visibility
       });
 
       // Update workout details first
@@ -192,22 +194,32 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
         console.log('Progress photo saved');
       }
 
-      // Create workout post if visibility is public
-      if (visibility === 'everyone' && workout.id) {
+      // Create or delete workout post based on visibility setting
+      if (workout.id && visibility !== 'private') {
+        const isPublic = visibility === 'everyone';
         await createWorkoutPostWithMedia(
           workout.id,
           workoutDescription,
           selectedMedia || undefined,
           mediaType || undefined,
-          true
+          isPublic
         );
-        console.log('Workout post created');
+        console.log(`Workout post created with visibility: ${visibility}`);
+      } else if (visibility === 'private') {
+        // If a post exists for this workout, delete it
+        const existingPost = await loadWorkoutPost(workout.id);
+        if (existingPost) {
+          await deleteWorkoutPost(existingPost.id);
+          console.log('Deleted existing workout post for private visibility');
+        } else {
+          console.log('Workout saved as private - no post created');
+        }
       }
+
       // Force refresh of current workout state
       setTimeout(() => {
         loadCurrentWorkout();
       }, 100);
-
 
       // Call the parent's onSave which will handle finishing the workout
       onSave();
@@ -283,6 +295,85 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
       hour12: true
     });
   };
+
+  const getVisibilityText = (vis: 'everyone' | 'friends' | 'private') => {
+    switch (vis) {
+      case 'everyone':
+        return 'Everyone';
+      case 'friends':
+        return 'Friends';
+      case 'private':
+        return 'Private';
+      default:
+        return 'Everyone';
+    }
+  };
+
+  const getVisibilityDescription = (vis: 'everyone' | 'friends' | 'private') => {
+    switch (vis) {
+      case 'everyone':
+        return 'Visible to all users';
+      case 'friends':
+        return 'Visible to your friends only';
+      case 'private':
+        return 'Only visible to you';
+      default:
+        return 'Visible to all users';
+    }
+  };
+
+  // Visibility Selection Modal
+  if (showVisibilityModal) {
+    return (
+      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setShowVisibilityModal(false)} style={styles.closeButton}>
+              <X size={24} color={Colors.primary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Choose Visibility</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={styles.content}>
+            {(['everyone', 'friends', 'private'] as const).map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.visibilityOption,
+                  visibility === option && styles.visibilityOptionSelected
+                ]}
+                onPress={() => {
+                  setVisibility(option);
+                  setShowVisibilityModal(false);
+                }}
+              >
+                <View style={styles.visibilityOptionContent}>
+                  <Text style={[
+                    styles.visibilityOptionTitle,
+                    visibility === option && styles.visibilityOptionTitleSelected
+                  ]}>
+                    {getVisibilityText(option)}
+                  </Text>
+                  <Text style={[
+                    styles.visibilityOptionDescription,
+                    visibility === option && styles.visibilityOptionDescriptionSelected
+                  ]}>
+                    {getVisibilityDescription(option)}
+                  </Text>
+                </View>
+                {visibility === option && (
+                  <View style={styles.visibilityCheckmark}>
+                    <Text style={styles.visibilityCheckmarkText}>✓</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    );
+  }
 
   if (showSaveRoutine) {
     return (
@@ -425,12 +516,17 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
           </View>
 
           {/* Visibility */}
-          <TouchableOpacity style={styles.visibilitySection}>
+          <TouchableOpacity style={styles.visibilitySection} onPress={() => setShowVisibilityModal(true)}>
             <Text style={styles.sectionLabel}>Visibility</Text>
             <View style={styles.visibilityRow}>
-              <Text style={styles.visibilityValue}>
-                {visibility.charAt(0).toUpperCase() + visibility.slice(1)}
-              </Text>
+              <View style={styles.visibilityInfo}>
+                <Text style={styles.visibilityValue}>
+                  {getVisibilityText(visibility)}
+                </Text>
+                <Text style={styles.visibilityDescription}>
+                  {getVisibilityDescription(visibility)}
+                </Text>
+              </View>
               <ChevronRight size={20} color={Colors.secondary} />
             </View>
           </TouchableOpacity>
@@ -622,9 +718,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
+  visibilityInfo: {
+    flex: 1,
+  },
   visibilityValue: {
     fontSize: FontSizes.sectionHeader,
     color: Colors.primary,
+  },
+  visibilityDescription: {
+    fontSize: FontSizes.caption,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  visibilityOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: Colors.cardBackground,
+  },
+  visibilityOptionSelected: {
+    backgroundColor: Colors.accent,
+  },
+  visibilityOptionContent: {
+    flex: 1,
+  },
+  visibilityOptionTitle: {
+    fontSize: FontSizes.body,
+    fontWeight: FontWeights.medium,
+    color: Colors.primary,
+  },
+  visibilityOptionTitleSelected: {
+    color: Colors.primary,
+  },
+  visibilityOptionDescription: {
+    fontSize: FontSizes.caption,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  visibilityOptionDescriptionSelected: {
+    color: Colors.primary,
+  },
+  visibilityCheckmark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  visibilityCheckmarkText: {
+    color: Colors.accent,
+    fontSize: FontSizes.caption,
+    fontWeight: FontWeights.bold,
   },
   prSection: {
     flexDirection: 'row',
@@ -656,50 +805,46 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: FontSizes.body,
     fontWeight: FontWeights.medium,
-    color: Colors.accent,
+    color: Colors.primary,
   },
   discardButton: {
-    marginTop: 32,
-    alignItems: 'center',
+    marginTop: 16,
     paddingVertical: 16,
+    alignItems: 'center',
   },
   discardButtonText: {
     fontSize: FontSizes.body,
     color: Colors.error,
+    fontWeight: FontWeights.medium,
   },
   bottomPadding: {
-    height: 32,
+    height: 100,
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   inputLabel: {
     fontSize: FontSizes.body,
-    fontWeight: FontWeights.medium,
-    color: Colors.primary,
+    color: Colors.secondary,
     marginBottom: 8,
   },
   input: {
     backgroundColor: Colors.cardBackground,
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 16,
     fontSize: FontSizes.body,
     color: Colors.primary,
   },
   textArea: {
-    height: 80,
     textAlignVertical: 'top',
+    minHeight: 80,
   },
   exercisePreview: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
+    marginTop: 24,
   },
   previewTitle: {
     fontSize: FontSizes.body,
-    fontWeight: FontWeights.semibold,
+    fontWeight: FontWeights.medium,
     color: Colors.primary,
     marginBottom: 12,
   },

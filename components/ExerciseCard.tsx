@@ -35,8 +35,9 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
     formatTime
   } = useRestTimer();
 
-  const completedSets = exercise.sets.filter((set: any) => set.completed);
-  const currentSetNumber = completedSets.length + 1;
+  // const completedSets = exercise.sets.filter((set: any) => set.completed);
+  // const currentSetNumber = completedSets.length + 1;
+  const currentSetNumber = exercise.sets.length + 1;
 
   const previousData = getPreviousSetData(exercise.exercise_id, currentSetNumber);
 
@@ -567,7 +568,7 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <TouchableOpacity onPress={onToggle} activeOpacity={0.85}>
+      <View>
         <View
           style={[
             {
@@ -578,38 +579,34 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
               borderWidth: isOpen ? 2 : 0,
               borderColor: isOpen ? Colors.accent : 'transparent',
             },
-            // No shadow/elevation
-            // shadowColor: undefined,
-            // shadowOffset: undefined,
-            // shadowOpacity: undefined,
-            // shadowRadius: undefined,
-            // elevation: undefined,
           ]}
         >
-          <View style={styles.exerciseHeader}>
-            <View style={styles.exerciseHeaderLeft}>
-              <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
-              {exercise.exercise.user_notes && (
-                <Text style={styles.exerciseNotes}>{exercise.exercise.user_notes}</Text>
-              )}
-            </View>
-            <View style={styles.exerciseHeaderRight}>
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => setShowExerciseInfo(true)}
-              >
-                <Info size={20} color={Colors.accent} />
-              </TouchableOpacity>
-              {onDeleteExercise && (
+          <TouchableOpacity onPress={onToggle} activeOpacity={0.85}>
+            <View style={styles.exerciseHeader}>
+              <View style={styles.exerciseHeaderLeft}>
+                <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
+                {exercise.user_note && (
+                  <Text style={styles.exerciseNotes}>{exercise.user_note}</Text>
+                )}
+              </View>
+              <View style={styles.exerciseHeaderRight}>
                 <TouchableOpacity
                   style={styles.headerButton}
-                  onPress={handleDeleteExercise}
+                  onPress={() => setShowExerciseInfo(true)}
                 >
-                  <Trash2 size={20} color={Colors.error} />
+                  <Info size={20} color={Colors.accent} />
                 </TouchableOpacity>
-              )}
+                {onDeleteExercise && (
+                  <TouchableOpacity
+                    style={styles.headerButton}
+                    onPress={handleDeleteExercise}
+                  >
+                    <Trash2 size={20} color={Colors.error} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
+          </TouchableOpacity>
           {isOpen && (
             <>
               <View style={styles.restTimerContainer}>
@@ -644,8 +641,7 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
             </>
           )}
         </View>
-      </TouchableOpacity>
-
+      </View>
       {/* ExerciseInfoModal - moved outside conditional block so it works when card is closed */}
       <ExerciseInfoModal
         visible={showExerciseInfo}
