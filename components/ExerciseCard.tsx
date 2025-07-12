@@ -429,14 +429,12 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
             style={styles.headerButton}
             onPress={() => setShowExerciseInfo(true)}
           >
-            <Info size={20} color={Colors.accent} />
           </TouchableOpacity>
           {onDeleteExercise && (
             <TouchableOpacity 
               style={styles.headerButton}
               onPress={handleDeleteExercise}
-                const { updateExerciseNotes } = useWorkoutStore.getState();
-                updateExerciseNotes(exercise.exercise.id, exerciseNotes);
+            >
               <Trash2 size={20} color={Colors.error} />
             </TouchableOpacity>
           )}
