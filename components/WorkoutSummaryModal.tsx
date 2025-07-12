@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Modal, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
   TextInput,
   Alert,
   Share,
@@ -46,14 +46,14 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
   const [showSaveRoutine, setShowSaveRoutine] = useState(false);
   const [routineName, setRoutineName] = useState('');
   const [routineDescription, setRoutineDescription] = useState('');
-  
+
   // Save workout form state
   const [workoutTitle, setWorkoutTitle] = useState('');
   const [workoutDescription, setWorkoutDescription] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'photo' | 'video' | null>(null);
   const [visibility, setVisibility] = useState<'everyone' | 'friends' | 'private'>('everyone');
-  
+
   const { saveWorkoutAsRoutine } = useWorkoutStore();
   const { updateWorkoutDetails, discardWorkout, loadCurrentWorkout } = useWorkoutStore();
   const { createWorkoutPost, createWorkoutPostWithMedia } = useSocialStore();
@@ -68,22 +68,21 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
 
   // Don't render if no workout data
   if (!workout) {
-    console.log('WorkoutSummaryModal: No workout data provided');
     return null;
   }
 
-  const duration = workout.end_time 
+  const duration = workout.end_time
     ? Math.round((new Date(workout.end_time).getTime() - new Date(workout.start_time).getTime()) / (1000 * 60))
     : 0;
 
-  const totalSets = workout.exercises.reduce((total: number, exercise: any) => 
+  const totalSets = workout.exercises.reduce((total: number, exercise: any) =>
     total + exercise.sets.filter((set: any) => set.completed).length, 0);
 
-  const totalVolume = workout.exercises.reduce((total: number, exercise: any) => 
-    total + exercise.sets.reduce((setTotal: number, set: any) => 
+  const totalVolume = workout.exercises.reduce((total: number, exercise: any) =>
+    total + exercise.sets.reduce((setTotal: number, set: any) =>
       setTotal + (set.completed ? Number(set.weight) * set.reps : 0), 0), 0);
 
-  const prCount = workout.exercises.reduce((total: number, exercise: any) => 
+  const prCount = workout.exercises.reduce((total: number, exercise: any) =>
     total + exercise.sets.filter((set: any) => set.is_pr).length, 0);
 
   const handleSaveAsRoutine = async () => {
@@ -180,24 +179,24 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
         title: workoutTitle.trim(),
         description: workoutDescription.trim()
       });
-      
+
       // Update workout details first
       if (workout.id && workoutTitle.trim()) {
         await updateWorkoutDetails(workout.id, workoutTitle.trim(), workoutDescription.trim() || undefined);
         console.log('Workout details updated successfully');
       }
-      
+
       // Save the media as progress photo if it's a photo
       if (selectedMedia && mediaType === 'photo') {
         await addProgressPhoto(selectedMedia, workoutDescription);
         console.log('Progress photo saved');
       }
-      
+
       // Create workout post if visibility is public
       if (visibility === 'everyone' && workout.id) {
         await createWorkoutPostWithMedia(
-          workout.id, 
-          workoutDescription, 
+          workout.id,
+          workoutDescription,
           selectedMedia || undefined,
           mediaType || undefined,
           true
@@ -208,8 +207,8 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
       setTimeout(() => {
         loadCurrentWorkout();
       }, 100);
-      
-      
+
+
       // Call the parent's onSave which will handle finishing the workout
       onSave();
     } catch (error) {
@@ -229,8 +228,8 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
         'Are you sure you want to discard this workout? This action cannot be undone.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Discard', 
+          {
+            text: 'Discard',
             style: 'destructive',
             onPress: handleDiscardAction
           }
@@ -252,7 +251,7 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
 
   const handleShare = async () => {
     const prText = prCount > 0 ? `\n🏆 ${prCount} Personal Record${prCount > 1 ? 's' : ''}!` : '';
-    
+
     const shareText = `💪 Workout Complete!
 
 📅 ${workoutTitle}
@@ -339,9 +338,9 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
   }
 
   return (
-    <Modal 
-      visible={visible} 
-      animationType="slide" 
+    <Modal
+      visible={visible}
+      animationType="slide"
       presentationStyle={Platform.OS === 'ios' ? "pageSheet" : "fullScreen"}
       onRequestClose={onDiscard}
     >

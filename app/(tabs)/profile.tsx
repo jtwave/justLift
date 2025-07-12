@@ -6,10 +6,10 @@ import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
 import { router, useFocusEffect } from 'expo-router';
-import { 
-  Settings, 
-  User, 
-  ChevronRight, 
+import {
+  Settings,
+  User,
+  ChevronRight,
   Users,
   UserPlus,
   Dumbbell
@@ -55,13 +55,12 @@ export default function ProfileScreen() {
     if (initialLoad) {
       setLoading(true);
     }
-    
+
     try {
-      console.log('Loading profile data...');
-      
+
       // Get the current user from Supabase auth directly
       const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-      
+
       if (userError || !currentUser) {
         console.log('No user found:', userError);
         return;
@@ -132,67 +131,67 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.profileSection}>
-            <TouchableOpacity 
-              style={styles.avatarContainer}
-              onPress={() => router.push('/profile/edit')}
-            >
-              {displayAvatar ? (
-                <Image source={{ uri: displayAvatar }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <User size={32} color={Colors.accent} />
-                </View>
-              )}
-            </TouchableOpacity>
-            <Text style={styles.profileName}>
-              {displayName}
-            </Text>
-            {displayUsername && (
-              <Text style={styles.profileUsername}>
-                @{displayUsername}
-              </Text>
+        <View style={styles.profileSection}>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={() => router.push('/profile/edit')}
+          >
+            {displayAvatar ? (
+              <Image source={{ uri: displayAvatar }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <User size={32} color={Colors.accent} />
+              </View>
             )}
-            <Text style={styles.profileSubtitle}>
-              {displayEmail}
+          </TouchableOpacity>
+          <Text style={styles.profileName}>
+            {displayName}
+          </Text>
+          {displayUsername && (
+            <Text style={styles.profileUsername}>
+              @{displayUsername}
             </Text>
-            {displayBio && (
-              <Text style={styles.profileBio}>
-                {displayBio}
-              </Text>
-            )}
-            <TouchableOpacity 
-              style={styles.editProfileButton}
-              onPress={() => router.push('/profile/edit')}
+          )}
+          <Text style={styles.profileSubtitle}>
+            {displayEmail}
+          </Text>
+          {displayBio && (
+            <Text style={styles.profileBio}>
+              {displayBio}
+            </Text>
+          )}
+          <TouchableOpacity
+            style={styles.editProfileButton}
+            onPress={() => router.push('/profile/edit')}
+          >
+            <Text style={styles.editProfileText}>Edit Profile</Text>
+          </TouchableOpacity>
+
+          {/* Social Stats - Show immediately with current values */}
+          <View style={styles.socialStats}>
+            <TouchableOpacity
+              style={styles.socialStat}
+              onPress={() => router.push('/profile/followers')}
             >
-              <Text style={styles.editProfileText}>Edit Profile</Text>
+              <Text style={styles.socialStatNumber}>{followersCount}</Text>
+              <Text style={styles.socialStatLabel}>Followers</Text>
             </TouchableOpacity>
-            
-            {/* Social Stats - Show immediately with current values */}
-            <View style={styles.socialStats}>
-              <TouchableOpacity 
-                style={styles.socialStat}
-                onPress={() => router.push('/profile/followers')}
-              >
-                <Text style={styles.socialStatNumber}>{followersCount}</Text>
-                <Text style={styles.socialStatLabel}>Followers</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.socialStat}
-                onPress={() => router.push('/profile/following')}
-              >
-                <Text style={styles.socialStatNumber}>{followingCount}</Text>
-                <Text style={styles.socialStatLabel}>Following</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.socialStat}
+              onPress={() => router.push('/profile/following')}
+            >
+              <Text style={styles.socialStatNumber}>{followingCount}</Text>
+              <Text style={styles.socialStatLabel}>Following</Text>
+            </TouchableOpacity>
           </View>
+        </View>
 
         {/* Progress Tracking */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Social</Text>
-          
+
           {/* Find Friends */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.dashboardCard}
             onPress={() => router.push('/search')}
           >
@@ -209,7 +208,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           {/* My Workouts */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.dashboardCard}
             onPress={() => router.push('/profile/workouts')}
           >
@@ -226,7 +225,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           {/* Settings */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.dashboardCard}
             onPress={() => router.push('/profile/settings')}
           >
@@ -245,7 +244,7 @@ export default function ProfileScreen() {
 
         {/* Sign Out */}
         <View style={styles.section}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.dashboardCard, styles.signOutCard]}
             onPress={handleSignOut}
           >
@@ -261,6 +260,8 @@ export default function ProfileScreen() {
             <ChevronRight size={20} color={Colors.secondary} />
           </TouchableOpacity>
         </View>
+        {/* Add bottom padding so Sign Out is not blocked by tab bar */}
+        <View style={{ height: 48 }} />
       </ScrollView>
     </SafeAreaView>
   );
