@@ -16,21 +16,22 @@ import { Plus, ArrowLeft, Trash2 } from 'lucide-react-native';
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 60;
 
 export default function ActiveWorkoutScreen() {
-  const { 
-    currentWorkout, 
-    finishWorkout, 
-    startWorkout, 
-    addExercise, 
-    logSet, 
+  const {
+    currentWorkout,
+    finishWorkout,
+    startWorkout,
+    addExercise,
+    logSet,
     setActiveExercise,
     loadCurrentWorkout,
     updateWorkoutDetails,
     discardWorkout,
     updateRestTime,
     removeExercise,
-    loading
+    loading,
+    addWorkoutSet
   } = useWorkoutStore();
-  
+
   const { elapsedTime, formatTime, startTimer, resetTimer } = useWorkoutTimer();
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
@@ -38,10 +39,13 @@ export default function ActiveWorkoutScreen() {
   const [isFinishing, setIsFinishing] = useState(false);
   const [showRestTimerSettings, setShowRestTimerSettings] = useState(false);
   const [selectedExerciseForSettings, setSelectedExerciseForSettings] = useState<string | null>(null);
-  
+
   // Rest timer state
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState(90);
+
+  // State to manage which exercises are open/closed
+  const [openExercises, setOpenExercises] = useState<string[]>([]);
 
   useEffect(() => {
     loadCurrentWorkout();
@@ -68,7 +72,7 @@ export default function ActiveWorkoutScreen() {
       const { deleteWorkoutSet } = useWorkoutStore.getState();
       await deleteWorkoutSet(setId);
       console.log('Set deleted successfully');
-      
+
       // Reload current workout to refresh the UI
       await loadCurrentWorkout();
     } catch (error) {
@@ -80,7 +84,7 @@ export default function ActiveWorkoutScreen() {
     console.log('=== HANDLE LOG SET START ===');
     console.log('workoutExerciseId:', workoutExerciseId);
     console.log('setData:', setData);
-    
+
     // Get current exercise state before logging
     const exerciseBeforeLog = currentWorkout?.exercises.find(ex => ex.id === workoutExerciseId);
     console.log('Exercise BEFORE log set:', {
@@ -89,19 +93,19 @@ export default function ActiveWorkoutScreen() {
       rest_time: exerciseBeforeLog?.rest_time,
       is_active: exerciseBeforeLog?.is_active
     });
-    
+
     await logSet(workoutExerciseId, setData);
     console.log('Set logged successfully');
-    
+
     // Reload current workout to get the latest state
     console.log('Reloading current workout...');
     await loadCurrentWorkout();
     console.log('Current workout reloaded');
-    
+
     // Get the fresh workout state and check if we should show rest timer
     const state = useWorkoutStore.getState();
     console.log('Fresh workout state loaded');
-    
+
     const exercise = state.currentWorkout?.exercises.find(ex => ex.id === workoutExerciseId);
     console.log('Exercise AFTER reload:', {
       id: exercise?.id,
@@ -109,17 +113,36 @@ export default function ActiveWorkoutScreen() {
       rest_time: exercise?.rest_time,
       is_active: exercise?.is_active
     });
-    
-    // Only show rest timer if rest_time is greater than 0
-    if (exercise && exercise.rest_time > 0) {
+
+    // Only show rest timer if marking as completed and rest_time is greater than 0
+    if (setData.completed && exercise && exercise.rest_time > 0) {
       console.log('Showing rest timer with duration:', exercise.rest_time);
       setRestTimerDuration(exercise.rest_time);
       setShowRestTimer(true);
     } else {
       console.log('NOT showing rest timer. Exercise:', !!exercise, 'rest_time:', exercise?.rest_time);
     }
-    
+
     console.log('=== HANDLE LOG SET END ===');
+  };
+
+  // Update handleAddSet to use addWorkoutSet for adding a set, but do not set completed: true
+  const handleAddSet = async (workoutExerciseId: string, setData: any) => {
+    console.log('=== HANDLE ADD SET START ===');
+    console.log('workoutExerciseId:', workoutExerciseId);
+    console.log('setData:', setData);
+
+    // Use addWorkoutSet to add a new set (not completed)
+    const { addWorkoutSet } = useWorkoutStore.getState();
+    console.log('Calling addWorkoutSet...');
+    await addWorkoutSet(workoutExerciseId, setData);
+    console.log('addWorkoutSet completed');
+
+    // Reload current workout to refresh the UI
+    console.log('Reloading current workout...');
+    await loadCurrentWorkout();
+    console.log('Current workout reloaded');
+    console.log('=== HANDLE ADD SET END ===');
   };
 
   const handleFinishWorkout = () => {
@@ -133,7 +156,7 @@ export default function ActiveWorkoutScreen() {
     const finishWorkoutAction = async () => {
       setIsFinishing(true);
       console.log('Starting finish workout process...');
-      
+
       // Store the current workout for the summary modal BEFORE finishing
       const workoutForSummary = {
         ...currentWorkout,
@@ -143,10 +166,10 @@ export default function ActiveWorkoutScreen() {
           sets: ex.sets.filter(set => set.completed)
         }))
       };
-      
+
       console.log('Workout summary data prepared:', workoutForSummary);
       setCompletedWorkout(workoutForSummary);
-      
+
       // Show the summary modal immediately without finishing the workout yet
       console.log('Showing summary modal...');
       setShowSummaryModal(true);
@@ -165,8 +188,8 @@ export default function ActiveWorkoutScreen() {
         'Are you sure you want to finish this workout?',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Finish', 
+          {
+            text: 'Finish',
             onPress: finishWorkoutAction
           }
         ]
@@ -177,13 +200,13 @@ export default function ActiveWorkoutScreen() {
   const handleStartWorkout = async () => {
     // Generate a descriptive name with current time
     const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
+    const timeString = now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit',
-      hour12: true 
+      hour12: true
     });
     const workoutName = `Workout - ${timeString}`;
-    
+
     await startWorkout(workoutName);
   };
 
@@ -196,15 +219,15 @@ export default function ActiveWorkoutScreen() {
     console.log('=== UPDATE REST TIME START ===');
     console.log('exerciseId:', exerciseId);
     console.log('new restTime:', restTime);
-    
+
     await updateRestTime(exerciseId, restTime);
     console.log('Rest time updated in database');
-    
+
     // Reload current workout to get updated rest times
     console.log('Reloading current workout after rest time update...');
     await loadCurrentWorkout();
     console.log('Current workout reloaded after rest time update');
-    
+
     // Log the updated exercise state
     const state = useWorkoutStore.getState();
     const exercise = state.currentWorkout?.exercises.find(ex => ex.id === exerciseId);
@@ -214,26 +237,26 @@ export default function ActiveWorkoutScreen() {
       rest_time: exercise?.rest_time,
       is_active: exercise?.is_active
     });
-    
+
     setShowRestTimerSettings(false);
     setSelectedExerciseForSettings(null);
     console.log('=== UPDATE REST TIME END ===');
   };
 
   const handleBackPress = () => {
-      router.back();
+    router.back();
   };
 
   const handleDeleteWorkout = () => {
     if (!currentWorkout) return;
-    
+
     Alert.alert(
       'Delete Workout',
       'Are you sure you want to delete this workout? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -252,18 +275,18 @@ export default function ActiveWorkoutScreen() {
   const handleWorkoutSaved = async () => {
     try {
       console.log('Saving and finishing workout...');
-      
+
       // Finish the workout immediately
       await finishWorkout();
       resetTimer();
-      
+
       // Close modal and navigate immediately
       setShowSummaryModal(false);
       setCompletedWorkout(null);
-      
+
       // Navigate directly to home tab
       router.replace('/(tabs)');
-      
+
     } catch (error) {
       console.error('Error saving workout:', error);
       Alert.alert('Error', 'Failed to save workout. Please try again.');
@@ -308,7 +331,7 @@ export default function ActiveWorkoutScreen() {
           <Text style={styles.headerTitle}>Start Workout</Text>
           <View style={styles.placeholder} />
         </View>
-        
+
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateTitle}>Ready to Train?</Text>
           <Text style={styles.emptyStateText}>
@@ -325,9 +348,6 @@ export default function ActiveWorkoutScreen() {
       </SafeAreaView>
     );
   }
-
-  const activeExercise = currentWorkout.exercises.find(ex => ex.is_active);
-  const inactiveExercises = currentWorkout.exercises.filter(ex => !ex.is_active);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -352,42 +372,34 @@ export default function ActiveWorkoutScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT }}>
-        {/* Inactive Exercises */}
-        {inactiveExercises.map((exercise) => (
-          <TouchableOpacity
-            key={exercise.id}
-            style={styles.inactiveExercise}
-            onPress={() => setActiveExercise(exercise.id)}
-          >
-            <Text style={styles.inactiveExerciseName}>{exercise.exercise.name}</Text>
-            <Text style={styles.inactiveExerciseStatus}>
-              {exercise.sets.filter((set: any) => set.completed).length}/{exercise.sets.length || 0} Sets Complete
-            </Text>
-          </TouchableOpacity>
-        ))}
-
-        {/* Active Exercise */}
-        {activeExercise && (
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT, paddingTop: 8, paddingHorizontal: 0 }}>
+        {currentWorkout.exercises.map((exercise) => (
           <ExerciseCard
-            exercise={activeExercise}
-            onLogSet={(setData) => handleLogSet(activeExercise.id, setData)}
-            onRestTimerSettings={() => handleRestTimerSettings(activeExercise.id)}
-            onDeleteExercise={() => handleDeleteExercise(activeExercise.id)}
-            onDeleteSet={handleDeleteSet}
+            key={exercise.id}
+            exercise={exercise}
+            isOpen={openExercises.includes(exercise.id)}
+            onToggle={() => {
+              setOpenExercises((prev) =>
+                prev.includes(exercise.id)
+                  ? prev.filter((id) => id !== exercise.id)
+                  : [...prev, exercise.id]
+              );
+            }}
+            onLogSet={(setData) => handleLogSet(exercise.id, setData)}
+            onAddSet={(setData) => handleAddSet(exercise.id, setData)}
+            onRestTimerSettings={() => handleRestTimerSettings(exercise.id)}
+            onDeleteExercise={() => handleDeleteExercise(exercise.id)}
+            onDeleteSet={(setId) => handleDeleteSet(setId)}
           />
-        )}
-
-        {/* Add Exercise Button */}
+        ))}
         <TouchableOpacity
-          style={styles.addExerciseButton}
+          style={[styles.addExerciseButton, { marginTop: 16 }]}
           onPress={() => setShowExerciseModal(true)}
           disabled={loading}
         >
           <Plus size={24} color={Colors.accent} />
           <Text style={styles.addExerciseText}>Add Exercise</Text>
         </TouchableOpacity>
-
         <View style={styles.bottomPadding} />
       </ScrollView>
 
@@ -418,7 +430,7 @@ export default function ActiveWorkoutScreen() {
         }}
         exerciseId={selectedExerciseForSettings}
         currentRestTime={
-          selectedExerciseForSettings 
+          selectedExerciseForSettings
             ? currentWorkout?.exercises.find(ex => ex.id === selectedExerciseForSettings)?.rest_time || 90
             : 90
         }

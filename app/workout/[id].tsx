@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -20,6 +20,8 @@ export default function WorkoutDetailScreen() {
   const [workout, setWorkout] = useState<any>(null);
   const [workoutPost, setWorkoutPost] = useState<any>(null);
   const [showOptions, setShowOptions] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (workoutHistory.length === 0) {
@@ -31,7 +33,7 @@ export default function WorkoutDetailScreen() {
     if (id && workoutHistory.length > 0) {
       const foundWorkout = workoutHistory.find(w => w.id === id);
       setWorkout(foundWorkout);
-      
+
       // Load workout post to get associated media
       if (foundWorkout) {
         loadWorkoutPostForWorkout(foundWorkout.id);
@@ -62,18 +64,18 @@ export default function WorkoutDetailScreen() {
     );
   }
 
-  const duration = workout.end_time 
+  const duration = workout.end_time
     ? Math.round((new Date(workout.end_time).getTime() - new Date(workout.start_time).getTime()) / (1000 * 60))
     : 0;
 
-  const totalSets = workout.exercises.reduce((total: number, exercise: any) => 
+  const totalSets = workout.exercises.reduce((total: number, exercise: any) =>
     total + exercise.sets.filter((set: any) => set.completed).length, 0);
 
-  const totalVolume = workout.exercises.reduce((total: number, exercise: any) => 
-    total + exercise.sets.reduce((setTotal: number, set: any) => 
+  const totalVolume = workout.exercises.reduce((total: number, exercise: any) =>
+    total + exercise.sets.reduce((setTotal: number, set: any) =>
       setTotal + (set.completed ? Number(set.weight) * set.reps : 0), 0), 0);
 
-  const prCount = workout.exercises.reduce((total: number, exercise: any) => 
+  const prCount = workout.exercises.reduce((total: number, exercise: any) =>
     total + exercise.sets.filter((set: any) => set.is_pr).length, 0);
 
   const formatDate = (dateString: string) => {
@@ -92,14 +94,14 @@ export default function WorkoutDetailScreen() {
 
   const handleDeletePost = async () => {
     if (!workoutPost) return;
-    
+
     Alert.alert(
       'Delete Post',
       'Are you sure you want to delete this workout post?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -117,14 +119,14 @@ export default function WorkoutDetailScreen() {
 
   const handleDeleteWorkout = async () => {
     if (!workout) return;
-    
+
     Alert.alert(
       'Delete Entire Workout',
       'Are you sure you want to delete this entire workout? This will remove all workout data and cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -132,15 +134,15 @@ export default function WorkoutDetailScreen() {
               if (workoutPost) {
                 await deleteWorkoutPost(workoutPost.id);
               }
-              
+
               // Then delete the workout itself
               const { error } = await supabase
                 .from('workouts')
                 .delete()
                 .eq('id', workout.id);
-              
+
               if (error) throw error;
-              
+
               // Navigate back to workouts list
               router.back();
             } catch (error) {
@@ -160,7 +162,7 @@ export default function WorkoutDetailScreen() {
         <Text style={styles.headerTitle}>Workout Details</Text>
         <View style={styles.headerActions}>
           {user?.id === workout?.user_id && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.optionsButton}
               onPress={() => setShowOptions(!showOptions)}
             >
@@ -174,7 +176,7 @@ export default function WorkoutDetailScreen() {
       {showOptions && user?.id === workout?.user_id && (
         <View style={styles.optionsMenu}>
           {workoutPost && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.optionItem}
               onPress={() => {
                 setShowOptions(false);
@@ -185,7 +187,7 @@ export default function WorkoutDetailScreen() {
               <Text style={styles.optionText}>Delete Post</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.optionItem}
             onPress={() => {
               setShowOptions(false);
@@ -205,7 +207,7 @@ export default function WorkoutDetailScreen() {
             <Text style={styles.workoutDescription}>{workout.description}</Text>
           )}
           <Text style={styles.workoutDate}>{formatDate(workout.start_time)}</Text>
-          
+
           {/* Stats */}
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
@@ -242,7 +244,13 @@ export default function WorkoutDetailScreen() {
               {workoutPost.media_type === 'video' ? 'Workout Video' : 'Workout Photo'}
             </Text>
             <View style={styles.mediaContainer}>
-              <Image source={{ uri: workoutPost.media_url }} style={styles.workoutMedia} />
+              <TouchableOpacity onPress={() => {
+                console.log('Image pressed', workoutPost.media_url);
+                setShowImageModal(true);
+                setModalImageUrl(workoutPost.media_url);
+              }} activeOpacity={0.85}>
+                <Image source={{ uri: workoutPost.media_url }} style={styles.workoutMedia} />
+              </TouchableOpacity>
               {workoutPost.caption && (
                 <Text style={styles.mediaCaption}>{workoutPost.caption}</Text>
               )}
@@ -255,17 +263,17 @@ export default function WorkoutDetailScreen() {
           <Text style={styles.sectionTitle}>Exercises</Text>
           {workout.exercises.map((exercise: any, index: number) => {
             const completedSets = exercise.sets.filter((set: any) => set.completed);
-            const maxWeight = completedSets.length > 0 
+            const maxWeight = completedSets.length > 0
               ? Math.max(...completedSets.map((set: any) => Number(set.weight)))
               : 0;
-            
+
             return (
               <View key={exercise.id} style={styles.exerciseCard}>
                 <View style={styles.exerciseHeader}>
                   <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
                   <Text style={styles.exerciseCategory}>{exercise.exercise.category}</Text>
                 </View>
-                
+
                 <View style={styles.exerciseStats}>
                   <Text style={styles.exerciseStatText}>
                     {completedSets.length} sets • Max: {maxWeight} lbs
@@ -294,6 +302,19 @@ export default function WorkoutDetailScreen() {
           })}
         </View>
       </ScrollView>
+      {/* Enlarged Image Modal */}
+      <Modal visible={showImageModal} transparent animationType="fade" onRequestClose={() => setShowImageModal(false)}>
+        <View style={styles.imageModalOverlay}>
+          <TouchableOpacity style={styles.imageModalClose} onPress={() => setShowImageModal(false)}>
+            <Text style={styles.imageModalCloseText}>×</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.imageModalContent} activeOpacity={1} onPress={() => setShowImageModal(false)}>
+            {modalImageUrl && (
+              <Image source={{ uri: modalImageUrl }} style={styles.imageModalImage} resizeMode="contain" />
+            )}
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -504,5 +525,42 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.caption,
     fontWeight: FontWeights.bold,
     color: Colors.primary,
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'flex-start', // Start from top
+    alignItems: 'center',
+    paddingTop: 32, // Add padding to push content below status bar
+  },
+  imageModalContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  imageModalImage: {
+    width: '90%',
+    height: '80%',
+    borderRadius: 16,
+  },
+  imageModalClose: {
+    position: 'absolute',
+    top: 8, // Move higher up
+    right: 32,
+    zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalCloseText: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: 'bold',
+    lineHeight: 36,
   },
 });

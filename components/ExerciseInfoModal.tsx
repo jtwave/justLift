@@ -20,6 +20,8 @@ import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { X, Target, Zap, Settings, Dumbbell, FileMusic as Muscle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+// Add import for ImageViewer
+import ImageViewer from 'react-native-image-zoom-viewer';
 
 // Interface for the component's props
 interface ExerciseInfoModalProps {
@@ -41,6 +43,10 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
   const [message, setMessage] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const noteInputRef = useRef<TextInput>(null);
+  // New state for enlarged image modal
+  const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null);
+  // New state for initial index in zoom viewer
+  const [enlargedImageIndex, setEnlargedImageIndex] = useState<number>(0);
 
   // Fetch note when the modal becomes visible or the exercise changes
   useEffect(() => {
@@ -181,15 +187,16 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
       onRequestClose={onClose}
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top', 'bottom', 'left', 'right']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+        {/* Header always at the very top, with insets */}
+        <View style={[styles.header, { paddingTop: insets.top, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: Colors.background }]}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
             <X size={24} color={Colors.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>{exercise.name || 'Exercise Info'}</Text>
           <View style={styles.placeholder} />
         </View>
         <KeyboardAvoidingView
-          style={{ flex: 1, backgroundColor: Colors.background }}
+          style={{ flex: 1, backgroundColor: Colors.background, paddingTop: insets.top + 56 }} // Add header height offset
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
@@ -219,22 +226,31 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
                 >
                   {exercise.image_url_1 && (
                     <View style={styles.imageContainer}>
-                      {/* Removed `cache` prop for default, more reliable caching behavior */}
-                      <Image
-                        source={{ uri: exercise.image_url_1 }}
-                        style={styles.exerciseImage}
-                        resizeMode="cover"
-                      />
+                      <TouchableOpacity onPress={() => {
+                        setEnlargedImageUrl(exercise.image_url_1);
+                        setEnlargedImageIndex(0);
+                      }} activeOpacity={0.85}>
+                        <Image
+                          source={{ uri: exercise.image_url_1 }}
+                          style={styles.exerciseImage}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
                       <Text style={styles.imageLabel}>Position 1</Text>
                     </View>
                   )}
                   {exercise.image_url_2 && (
                     <View style={styles.imageContainer}>
-                      <Image
-                        source={{ uri: exercise.image_url_2 }}
-                        style={styles.exerciseImage}
-                        resizeMode="cover"
-                      />
+                      <TouchableOpacity onPress={() => {
+                        setEnlargedImageUrl(exercise.image_url_2);
+                        setEnlargedImageIndex(exercise.image_url_1 ? 1 : 0);
+                      }} activeOpacity={0.85}>
+                        <Image
+                          source={{ uri: exercise.image_url_2 }}
+                          style={styles.exerciseImage}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
                       <Text style={styles.imageLabel}>Position 2</Text>
                     </View>
                   )}
@@ -313,6 +329,35 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      {/* Enlarged Image Modal */}
+      <Modal visible={!!enlargedImageUrl} transparent animationType="fade" onRequestClose={() => setEnlargedImageUrl(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' }}>
+          {/* Close button at the top */}
+          <TouchableOpacity style={{ position: 'absolute', top: insets.top + 8, right: 32, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }} onPress={() => setEnlargedImageUrl(null)}>
+            <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', lineHeight: 36 }}>×</Text>
+          </TouchableOpacity>
+          {/* Pinch and swipe viewer */}
+          {enlargedImageUrl && (
+            <ImageViewer
+              imageUrls={[
+                ...(exercise.image_url_1 ? [{ url: exercise.image_url_1 }] : []),
+                ...(exercise.image_url_2 ? [{ url: exercise.image_url_2 }] : []),
+              ]}
+              index={enlargedImageIndex}
+              enableSwipeDown={true}
+              onSwipeDown={() => setEnlargedImageUrl(null)}
+              onCancel={() => setEnlargedImageUrl(null)}
+              backgroundColor="rgba(0,0,0,0)"
+              renderIndicator={(currentIndex, allSize) => (
+                <Text style={{ color: '#fff', position: 'absolute', top: insets.top + 16, left: 24, fontSize: 16 }}>{currentIndex} / {allSize}</Text>
+              )}
+              saveToLocalByLongPress={false}
+              renderHeader={() => null}
+              renderFooter={() => null}
+            />
+          )}
+        </View>
+      </Modal>
     </Modal>
   );
 }

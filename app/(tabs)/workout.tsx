@@ -25,17 +25,17 @@ export default function WorkoutScreen() {
       router.push('/workout/active');
       return;
     }
-    
+
     try {
       // Generate a descriptive name with current time
       const now = new Date();
-      const timeString = now.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
+      const timeString = now.toLocaleTimeString('en-US', {
+        hour: 'numeric',
         minute: '2-digit',
-        hour12: true 
+        hour12: true
       });
       const workoutName = `Workout - ${timeString}`;
-      
+
       await startWorkout(workoutName);
       router.push('/workout/active');
     } catch (error) {
@@ -139,7 +139,7 @@ export default function WorkoutScreen() {
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.createRoutineButton}
-            onPress={() => router.push('/routines/create')}
+            onPress={() => router.push('/workout/routines/create')}
             disabled={loading}
           >
             <Plus size={24} color={Colors.accent} />

@@ -4,19 +4,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useWorkoutStore } from '@/store/workoutStore';
-import { Minus, Plus, Timer, Settings, Info, Play, Pause, RotateCcw, Trash2, X } from 'lucide-react-native';
+import { Minus, Plus, Timer, Settings, Info, Play, Pause, RotateCcw, Trash2, X, CheckCircle } from 'lucide-react-native';
 import { ExerciseInfoModal } from './ExerciseInfoModal';
 import { useRestTimer } from '@/hooks/useRestTimer';
 
 interface ExerciseCardProps {
   exercise: any;
   onLogSet: (setData: any) => void;
+  onAddSet: (setData: any) => void;
   onRestTimerSettings: () => void;
   onDeleteExercise?: () => void;
   onDeleteSet?: (setId: string) => void;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
-export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDeleteExercise, onDeleteSet }: ExerciseCardProps) {
+export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings, onDeleteExercise, onDeleteSet, isOpen = false, onToggle }: ExerciseCardProps) {
   const { getPreviousSetData } = useWorkoutStore();
   const [showExerciseInfo, setShowExerciseInfo] = useState(false);
 
@@ -209,7 +212,7 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
   };
 
   const handleTimeInputChange = (input: string) => {
-    setTimeInput(input);
+    setRawTimeInput(input);
     const totalSeconds = parseTimeToSeconds(input);
     adjustDuration(totalSeconds - duration);
   };
@@ -251,6 +254,137 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
     if (exercise.exercise.tracking_type === 'time_only') {
       resetTimer();
     }
+  };
+
+  const handleMarkSetDone = (setId: string) => {
+    Alert.alert(
+      'Mark Set as Done',
+      'Are you sure you want to mark this set as done?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark Done',
+          style: 'default',
+          onPress: () => {
+            onLogSet({ ...exercise.sets.find((set: any) => set.id === setId), completed: true, timestamp: new Date().toISOString() });
+            // Start rest timer if it's a time-only exercise
+            if (exercise.exercise.tracking_type === 'time_only') {
+              adjustDuration(exercise.rest_time); // Set duration to rest time
+              startTimer();
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Update handleAddSet to call onAddSet, not onLogSet
+  const handleAddSet = () => {
+    console.log('=== ADD SET START ===');
+    console.log('Input values:', { weight, reps, distance, rawTimeInput });
+    console.log('Exercise tracking type:', exercise.exercise.tracking_type);
+
+    const nextSetNumber = (exercise.sets[exercise.sets.length - 1]?.set_number || 0) + 1;
+    let newSet: any = {
+      set_number: nextSetNumber,
+      completed: false,
+      timestamp: null,
+    };
+
+    switch (exercise.exercise.tracking_type) {
+      case 'weight_reps':
+        newSet.weight = parseFloat(weight) || 0;
+        newSet.reps = parseInt(reps) || 0;
+        break;
+      case 'cardio':
+      case 'distance_time':
+        newSet.weight = parseFloat(distance) || 0; // Store distance in weight field
+        newSet.reps = parseSmartTime(rawTimeInput); // Store time in reps field
+        break;
+      case 'time_only':
+        newSet.weight = 0;
+        newSet.reps = parseSmartTime(rawTimeInput); // Use parsed time from input
+        break;
+      default:
+        newSet.weight = parseFloat(weight) || 0;
+        newSet.reps = parseInt(reps) || 0;
+        break;
+    }
+
+    console.log('New set object:', newSet);
+    console.log('Calling onAddSet...');
+    onAddSet(newSet);
+    console.log('=== ADD SET END ===');
+
+    // Clear input fields
+    setWeight('');
+    setReps('');
+    setDistance('');
+    setRawTimeInput('');
+  };
+
+  const renderSets = () => {
+    return (
+      <View style={styles.completedSets}>
+        <View style={styles.completedSetsHeader}>
+          <Text style={styles.completedSetsTitle}>Sets</Text>
+        </View>
+        {exercise.sets.map((set: any, index: number) => {
+          const isDone = set.completed;
+          let setText = '';
+          switch (exercise.exercise.tracking_type) {
+            case 'time_only':
+              setText = `${formatTime(set.reps)}`;
+              break;
+            case 'bodyweight_reps':
+              setText = `${set.reps} reps`;
+              break;
+            case 'cardio':
+            case 'distance_time':
+              setText = `${set.weight} mi in ${formatTime(set.reps)}`;
+              break;
+            default:
+              setText = `${set.weight} lbs × ${set.reps}`;
+          }
+          return (
+            <View
+              key={set.id}
+              style={[styles.completedSetBox, isDone ? styles.completedSetBoxDone : styles.completedSetBoxActive]}
+            >
+              <Text style={[styles.completedSetText, isDone && styles.completedSetTextDone]}>
+                Set {set.set_number}: {setText}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity onPress={() => {
+                  if (isDone) {
+                    // Mark as uncompleted (do NOT start rest timer)
+                    onLogSet({ ...set, completed: false, timestamp: null });
+                  } else {
+                    // Mark as completed and start rest timer if needed
+                    onLogSet({ ...set, completed: true, timestamp: new Date().toISOString() });
+                    if (exercise.exercise.tracking_type === 'time_only') {
+                      adjustDuration(exercise.rest_time);
+                      startTimer();
+                    }
+                  }
+                }}>
+                  <CheckCircle
+                    size={24}
+                    color={isDone ? (Colors.success || '#4CAF50') : Colors.accent}
+                    fill={isDone ? (Colors.success || '#4CAF50') : 'none'}
+                  />
+                </TouchableOpacity>
+                {!isDone && onDeleteSet && (
+                  <TouchableOpacity onPress={() => handleDeleteSet(set.id)}>
+                    <Trash2 size={22} color={Colors.error} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
   };
 
   const renderTrackingInputs = () => {
@@ -427,58 +561,31 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
     }
   };
 
-  const renderCompletedSets = () => {
-    if (completedSets.length === 0) return null;
-
-    return (
-      <View style={styles.completedSets}>
-        <View style={styles.completedSetsHeader}>
-          <Text style={styles.completedSetsTitle}>Completed Sets</Text>
-        </View>
-        {completedSets.map((set: any, index: number) => {
-          let setText = '';
-
-          switch (exercise.exercise.tracking_type) {
-            case 'time_only':
-              setText = `Set ${set.set_number}: ${formatTime(set.reps)}`;
-              break;
-            case 'bodyweight_reps':
-              setText = `Set ${set.set_number}: ${set.reps} reps`;
-              break;
-            case 'cardio':
-            case 'distance_time':
-              setText = `Set ${set.set_number}: ${set.weight} mi in ${formatTime(set.reps)}`;
-              break;
-            default:
-              setText = `Set ${set.set_number}: ${set.weight} lbs × ${set.reps}`;
-          }
-
-          return (
-            <View key={set.id} style={styles.completedSet}>
-              <Text style={styles.completedSetText}>{setText}</Text>
-              {onDeleteSet && (
-                <TouchableOpacity
-                  style={styles.deleteSetButton}
-                  onPress={() => handleDeleteSet(set.id)}
-                >
-                  <X size={16} color={Colors.error} />
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: Colors.cardBackground }}
+      style={{ flex: 1, backgroundColor: 'transparent', borderRadius: 16 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.cardBackground }} edges={['top', 'bottom', 'left', 'right']}>
-        <View style={styles.container}>
+      <TouchableOpacity onPress={onToggle} activeOpacity={0.85}>
+        <View
+          style={[
+            {
+              backgroundColor: isOpen ? '#23232a' : '#18181b',
+              borderRadius: 16,
+              padding: 12,
+              marginBottom: 2,
+              borderWidth: isOpen ? 2 : 0,
+              borderColor: isOpen ? Colors.accent : 'transparent',
+            },
+            // No shadow/elevation
+            // shadowColor: undefined,
+            // shadowOffset: undefined,
+            // shadowOpacity: undefined,
+            // shadowRadius: undefined,
+            // elevation: undefined,
+          ]}
+        >
           <View style={styles.exerciseHeader}>
             <View style={styles.exerciseHeaderLeft}>
               <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
@@ -503,65 +610,53 @@ export function ExerciseCard({ exercise, onLogSet, onRestTimerSettings, onDelete
               )}
             </View>
           </View>
-
-          <View style={styles.restTimerContainer}>
-            <TouchableOpacity
-              style={styles.restTimerButton}
-              onPress={onRestTimerSettings}
-            >
-              <Timer size={16} color={Colors.accent} />
-              <Text style={styles.restTimerButtonText}>
-                Rest Timer: {Math.floor(exercise.rest_time / 60)}:{(exercise.rest_time % 60).toString().padStart(2, '0')}
-              </Text>
-              <Settings size={14} color={Colors.secondary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Completed Sets */}
-          {renderCompletedSets()}
-
-          {/* Active Set */}
-          <View style={styles.activeSet}>
-            <View style={styles.setHeader}>
-              <Text style={styles.setNumber}>Set {currentSetNumber}</Text>
-              {previousData && (
-                <Text style={styles.previousData}>
-                  Prev: {previousData.weight} lbs × {previousData.reps}
-                </Text>
-              )}
-            </View>
-
-            {renderTrackingInputs()}
-
-            <TouchableOpacity
-              style={styles.logButton}
-              onPress={handleLogSet}
-              disabled={exercise.exercise.tracking_type === 'time_only' && isActive}
-            >
-              <Text style={styles.logButtonText}>
-                {exercise.exercise.tracking_type === 'time_only' ? 'Complete Set' : 'Log Set'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <ExerciseInfoModal
-            visible={showExerciseInfo}
-            onClose={() => setShowExerciseInfo(false)}
-            exercise={exercise.exercise}
-          />
+          {isOpen && (
+            <>
+              <View style={styles.restTimerContainer}>
+                <TouchableOpacity
+                  style={styles.restTimerButton}
+                  onPress={onRestTimerSettings}
+                >
+                  <Timer size={16} color={Colors.accent} />
+                  <Text style={styles.restTimerButtonText}>
+                    Rest Timer: {Math.floor(exercise.rest_time / 60)}:{(exercise.rest_time % 60).toString().padStart(2, '0')}
+                  </Text>
+                  <Settings size={14} color={Colors.secondary} />
+                </TouchableOpacity>
+              </View>
+              {/* Completed Sets */}
+              {renderSets()}
+              {/* Active Set */}
+              <View style={styles.activeSet}>
+                <View style={styles.setHeader}>
+                  <Text style={styles.setNumber}>Set {currentSetNumber}</Text>
+                  {previousData && (
+                    <Text style={styles.previousData}>
+                      Prev: {previousData.weight} lbs × {previousData.reps}
+                    </Text>
+                  )}
+                </View>
+                {renderTrackingInputs()}
+              </View>
+              <TouchableOpacity onPress={handleAddSet} style={{ marginTop: 12, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.cardBackground }}>
+                <Text style={{ color: Colors.accent, fontWeight: 'bold', fontSize: 16 }}>+ Add Set</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
-      </SafeAreaView>
+      </TouchableOpacity>
+
+      {/* ExerciseInfoModal - moved outside conditional block so it works when card is closed */}
+      <ExerciseInfoModal
+        visible={showExerciseInfo}
+        onClose={() => setShowExerciseInfo(false)}
+        exercise={exercise.exercise}
+      />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-  },
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -621,17 +716,32 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   completedSet: {
+    // old style, now unused
+  },
+  completedSetBox: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    marginBottom: 8,
+    backgroundColor: 'rgba(200,200,200,0.15)',
+  },
+  completedSetBoxActive: {
+    backgroundColor: 'rgba(200,200,200,0.15)',
+  },
+  completedSetBoxDone: {
+    backgroundColor: 'rgba(76, 175, 80, 0.18)', // light green
   },
   completedSetText: {
     fontSize: FontSizes.body,
     color: Colors.secondary,
     flex: 1,
+  },
+  completedSetTextDone: {
+    color: Colors.primary, // Use white or primary for contrast
+    // Remove textDecorationLine: 'line-through',
   },
   deleteSetButton: {
     padding: 4,

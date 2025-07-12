@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -12,8 +12,9 @@ import { supabase } from '@/lib/supabase';
 export default function CommentsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { likePost, unlikePost } = useSocialStore();
-  
+  const { likePost, unlikePost, feedPosts, set: setFeedPosts } = useSocialStore();
+  const scrollViewRef = useRef<ScrollView>(null);
+
   const [post, setPost] = useState<any>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -29,7 +30,7 @@ export default function CommentsScreen() {
   const loadPostAndComments = async () => {
     try {
       setLoading(true);
-      
+
       // Load the post
       const { data: postData, error: postError } = await supabase
         .from('workout_posts')
@@ -99,7 +100,7 @@ export default function CommentsScreen() {
 
     try {
       setSubmitting(true);
-      
+
       const { data: commentData, error } = await supabase
         .from('workout_comments')
         .insert({
@@ -117,14 +118,25 @@ export default function CommentsScreen() {
 
       setComments(prev => [...prev, commentData]);
       setNewComment('');
-      
-      // Update post comment count
+
+      // Update post comment count locally
       if (post) {
         setPost(prev => ({
           ...prev,
           comments_count: prev.comments_count + 1
         }));
       }
+      // Update comment count in feedPosts (global store)
+      useSocialStore.setState((state: any) => ({
+        feedPosts: state.feedPosts.map((p: any) =>
+          p.id === id ? { ...p, comments_count: p.comments_count + 1 } : p
+        )
+      }));
+
+      // Auto-scroll to bottom after adding comment
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
 
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -135,7 +147,7 @@ export default function CommentsScreen() {
 
   const handleLike = async () => {
     if (!post) return;
-    
+
     if (post.is_liked) {
       await unlikePost(post.id);
       setPost(prev => ({
@@ -157,7 +169,7 @@ export default function CommentsScreen() {
     const now = new Date();
     const date = new Date(dateString);
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -174,6 +186,15 @@ export default function CommentsScreen() {
       <Text style={styles.commentContent}>{item.content}</Text>
     </View>
   );
+
+  // Auto-scroll to bottom when comments load
+  useEffect(() => {
+    if (comments.length > 0 && !loading) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 200);
+    }
+  }, [comments.length, loading]);
 
   if (loading) {
     return (
@@ -213,49 +234,55 @@ export default function CommentsScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <FlatList
-          data={comments}
-          renderItem={renderComment}
-          keyExtractor={(item) => item.id}
+        <ScrollView
+          ref={scrollViewRef}
           style={styles.commentsList}
           contentContainerStyle={styles.commentsContent}
-          ListHeaderComponent={
-            <View style={styles.postHeader}>
-              <View style={styles.postInfo}>
-                <Text style={styles.postUser}>@{post.user.username}</Text>
-                <Text style={styles.postWorkout}>{post.workout.name}</Text>
-                {post.caption && (
-                  <Text style={styles.postCaption}>{post.caption}</Text>
-                )}
-              </View>
-              
-              <View style={styles.postActions}>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={handleLike}
-                >
-                  <Heart 
-                    size={20} 
-                    color={post.is_liked ? Colors.error : Colors.secondary}
-                    fill={post.is_liked ? Colors.error : 'none'}
-                  />
-                  <Text style={[
-                    styles.actionText,
-                    post.is_liked && { color: Colors.error }
-                  ]}>
-                    {post.likes_count}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          }
           showsVerticalScrollIndicator={false}
-        />
-
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.postHeader}>
+            <View style={styles.postInfo}>
+              <Text style={styles.postUser}>@{post.user.username}</Text>
+              <Text style={styles.postWorkout}>{post.workout.name}</Text>
+              {post.caption && (
+                <Text style={styles.postCaption}>{post.caption}</Text>
+              )}
+            </View>
+            <View style={styles.postActions}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleLike}
+              >
+                <Heart
+                  size={20}
+                  color={post.is_liked ? Colors.error : Colors.secondary}
+                  fill={post.is_liked ? Colors.error : 'none'}
+                />
+                <Text style={[
+                  styles.actionText,
+                  post.is_liked && { color: Colors.error }
+                ]}>
+                  {post.likes_count}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          {comments.map((item, idx) => (
+            <View key={item.id || idx} style={styles.commentItem}>
+              <View style={styles.commentHeader}>
+                <Text style={styles.commentUsername}>@{item.user.username || 'user'}</Text>
+                <Text style={styles.commentTime}>{formatTimeAgo(item.created_at)}</Text>
+              </View>
+              <Text style={styles.commentContent}>{item.content}</Text>
+            </View>
+          ))}
+        </ScrollView>
         <View style={styles.commentInput}>
           <TextInput
             style={styles.textInput}
@@ -265,6 +292,7 @@ export default function CommentsScreen() {
             placeholderTextColor={Colors.secondary}
             multiline
             maxLength={500}
+            onFocus={() => setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100)}
           />
           <TouchableOpacity
             style={[
