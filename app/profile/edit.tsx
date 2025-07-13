@@ -8,8 +8,43 @@ import { router } from 'expo-router';
 import { ArrowLeft, Camera, User } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 60;
+
+// Helper to upload image to Supabase Storage
+async function uploadProfilePhoto(uri: string, userId: string): Promise<string | null> {
+  try {
+    // Get file extension
+    const ext = uri.split('.').pop() || 'jpg';
+    // Store directly in the root of the bucket
+    const path = `${userId}_${Date.now()}.${ext}`;
+
+    // Read file as base64
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+    const fileBuffer = decode(base64);
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('profile-photos')
+      .upload(path, fileBuffer, {
+        contentType: `image/${ext}`,
+        upsert: true,
+      });
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      return null;
+    }
+
+    // Use getPublicUrl to get the public URL
+    const { data: publicUrlData } = supabase.storage.from('profile-photos').getPublicUrl(path);
+    return publicUrlData.publicUrl;
+  } catch (err) {
+    console.error('Failed to upload profile photo:', err);
+    return null;
+  }
+}
 
 export default function EditProfileScreen() {
   const { user } = useAuth();
@@ -27,7 +62,7 @@ export default function EditProfileScreen() {
 
   useEffect(() => {
     // Check if there are any changes
-    const changes = 
+    const changes =
       username !== originalData.username ||
       bio !== originalData.bio ||
       avatarUrl !== originalData.avatarUrl;
@@ -47,7 +82,7 @@ export default function EditProfileScreen() {
     try {
       // Get the current user from Supabase auth
       const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-      
+
       if (userError || !currentUser) {
         console.error('User authentication error:', userError);
         return;
@@ -71,7 +106,7 @@ export default function EditProfileScreen() {
       setUsername(userUsername);
       setAvatarUrl(avatar);
       setBio(userBio);
-      
+
       // Store original data for comparison
       setOriginalData({
         username: userUsername,
@@ -117,6 +152,7 @@ export default function EditProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setAvatarUrl(result.assets[0].uri);
+        setHasChanges(true);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to take photo');
@@ -140,6 +176,7 @@ export default function EditProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setAvatarUrl(result.assets[0].uri);
+        setHasChanges(true);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to select photo');
@@ -148,31 +185,34 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     setErrorMessage('');
-    
     if (!hasChanges) {
       router.back();
       return;
     }
-
     try {
       setLoading(true);
-      
-      // Get the current user from Supabase auth
       const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-      
       if (userError || !currentUser) {
         console.error('User authentication error:', userError);
         Alert.alert('Error', 'User not authenticated');
         return;
       }
-
-      console.log('Saving profile with data:', {
-        id: currentUser.id,
-        email: currentUser.email,
-        username: username.trim() || null,
-        avatar_url: avatarUrl,
-      });
-
+      let uploadedUrl = avatarUrl;
+      // If avatarUrl is a local file, upload it
+      if (avatarUrl && avatarUrl.startsWith('file://')) {
+        // Delete old photo if it exists and is in profile-photos bucket
+        const oldUrl = originalData.avatarUrl as string | null;
+        if (oldUrl && oldUrl.includes('/profile-photos/')) {
+          // Extract the filename from the URL
+          const parts = oldUrl.split('/profile-photos/');
+          if (parts.length === 2) {
+            const oldFilename = parts[1];
+            console.log('Deleting old profile photo:', oldFilename);
+            await supabase.storage.from('profile-photos').remove([oldFilename]);
+          }
+        }
+        uploadedUrl = await uploadProfilePhoto(avatarUrl, currentUser.id);
+      }
       const { error } = await supabase
         .from('profiles')
         .upsert({
@@ -181,35 +221,23 @@ export default function EditProfileScreen() {
           username: username.trim() || null,
           full_name: username.trim() || null,
           bio: bio.trim() || null,
-          avatar_url: avatarUrl,
+          avatar_url: uploadedUrl,
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'id'
         });
-
       if (error) {
         console.error('Supabase error:', error);
-        
-        // Handle specific error for duplicate username
         if (error.message.includes('duplicate key value violates unique constraint "profiles_username_key"')) {
           setErrorMessage('This username is already taken. Please choose another one.');
           return;
         }
-        
         throw error;
       }
-
-      console.log('Profile updated successfully');
-      // Navigate back smoothly
       router.back();
     } catch (error) {
-      console.error('Error updating profile:', error);
-      const message = (error as Error).message;
-      if (message.includes('duplicate key value violates unique constraint "profiles_username_key"')) {
-        setErrorMessage('This username is already taken. Please choose another one.');
-      } else {
-        setErrorMessage(`Failed to update profile: ${message}`);
-      }
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', 'Failed to save profile');
     } finally {
       setLoading(false);
     }
@@ -226,13 +254,13 @@ export default function EditProfileScreen() {
           onPress={handleSave}
           disabled={loading}
           style={[
-            styles.saveButton, 
+            styles.saveButton,
             loading && styles.saveButtonDisabled,
             hasChanges && styles.saveButtonActive
           ]}
         >
           <Text style={[
-            styles.saveButtonText, 
+            styles.saveButtonText,
             loading && styles.saveButtonTextDisabled,
             hasChanges && styles.saveButtonTextActive
           ]}>
@@ -241,13 +269,13 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
-          style={styles.content} 
+        <ScrollView
+          style={styles.content}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.scrollContent}
@@ -274,7 +302,7 @@ export default function EditProfileScreen() {
           {/* Profile Data */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Public profile data</Text>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Username</Text>
               {errorMessage ? (

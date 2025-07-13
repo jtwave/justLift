@@ -21,6 +21,9 @@ import { useSocialStore } from '@/store/socialStore';
 import { useProgressStore } from '@/store/progressStore';
 import { X, Share2, Camera, Save, Award, ChevronRight, Image as ImageIcon, Video } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
+import { supabase } from '@/lib/supabase';
 
 interface WorkoutSummaryModalProps {
   visible: boolean;
@@ -173,6 +176,31 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
     }
   };
 
+  // Helper to upload workout photo to Supabase Storage
+  async function uploadWorkoutPhoto(uri: string, userId: string): Promise<string | null> {
+    try {
+      const ext = uri.split('.').pop() || 'jpg';
+      const path = `workouts/${userId}_${Date.now()}.${ext}`;
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileBuffer = decode(base64);
+      const { data, error } = await supabase.storage
+        .from('profile-photos') // or 'workout-photos' if you create a separate bucket
+        .upload(path, fileBuffer, {
+          contentType: `image/${ext}`,
+          upsert: true,
+        });
+      if (error) {
+        console.error('Upload error:', error);
+        return null;
+      }
+      const { data: publicUrlData } = supabase.storage.from('profile-photos').getPublicUrl(path);
+      return publicUrlData.publicUrl;
+    } catch (err) {
+      console.error('Failed to upload workout photo:', err);
+      return null;
+    }
+  }
+
   const handleSaveWorkout = async () => {
     try {
       console.log('Saving workout with details:', {
@@ -188,9 +216,21 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
         console.log('Workout details updated successfully');
       }
 
+      let uploadedMediaUrl = selectedMedia;
+      // If selectedMedia is a local file and is a photo, upload it
+      if (selectedMedia && mediaType === 'photo' && selectedMedia.startsWith('file://')) {
+        // You may want to get the current user ID here
+        const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+        if (userError || !currentUser) {
+          Alert.alert('Error', 'User not authenticated');
+          return;
+        }
+        uploadedMediaUrl = await uploadWorkoutPhoto(selectedMedia, currentUser.id);
+      }
+
       // Save the media as progress photo if it's a photo
-      if (selectedMedia && mediaType === 'photo') {
-        await addProgressPhoto(selectedMedia, workoutDescription);
+      if (uploadedMediaUrl && mediaType === 'photo') {
+        await addProgressPhoto(uploadedMediaUrl, workoutDescription);
         console.log('Progress photo saved');
       }
 
@@ -200,7 +240,7 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
         await createWorkoutPostWithMedia(
           workout.id,
           workoutDescription,
-          selectedMedia || undefined,
+          uploadedMediaUrl || undefined,
           mediaType || undefined,
           isPublic
         );

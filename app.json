@@ -1,19 +1,24 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
+    "name": "LiftBuddies",
     "slug": "bolt-expo-nativewind",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/images/icon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jtwave.boltexponativewind",
+      "bundleIdentifier": "com.jtwave.liftbuddies",
+      "buildNumber": "1.0.1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app uses the camera to allow users to take and upload profile or progress photos."
       }
+    },
+    "android": {
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",
@@ -33,6 +38,7 @@
       "eas": {
         "projectId": "84b7f11e-07f3-4c2b-9147-b17ed7722145"
       }
-    }
+    },
+    "owner": "jtwave"
   }
 }

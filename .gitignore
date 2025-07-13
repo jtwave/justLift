@@ -31,5 +31,8 @@ yarn-error.*
 .env*.local
 .env
 
+# EAS configuration (contains API keys)
+eas.json
+
 # typescript
 *.tsbuildinfo
