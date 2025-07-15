@@ -6,6 +6,7 @@ import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useAuth } from '@/hooks/useAuth';
 import { useSocialStore } from '@/store/socialStore';
 import { Eye, EyeOff } from 'lucide-react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 export function AuthScreen() {
   const { colors } = useThemeContext();
@@ -18,7 +19,7 @@ export function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithApple } = useAuth();
   const { checkUsernameAvailable } = useSocialStore();
 
   // Clear error message when user starts typing or switches modes
@@ -207,6 +208,25 @@ export function AuthScreen() {
                   {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
                 </Text>
               </TouchableOpacity>
+
+              {/* Apple Sign-In Button (iOS only) */}
+              {Platform.OS === 'ios' && (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={isSignUp ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP : AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={8}
+                  style={{ width: '100%', height: 44, marginTop: 16 }}
+                  onPress={async () => {
+                    setLoading(true);
+                    setErrorMessage('');
+                    const { error } = await signInWithApple();
+                    setLoading(false);
+                    if (error) {
+                      setErrorMessage(error.message || (isSignUp ? 'Apple Sign-Up failed' : 'Apple Sign-In failed'));
+                    }
+                  }}
+                />
+              )}
 
               <TouchableOpacity
                 style={styles.switchButton}

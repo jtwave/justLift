@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { Platform } from 'react-native';
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -44,7 +46,7 @@ export function useAuth() {
   const signIn = async (emailOrUsername: string, password: string) => {
     // Check if the input is an email (contains @) or username
     const isEmail = emailOrUsername.includes('@');
-    
+
     if (isEmail) {
       // Sign in with email directly
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -59,14 +61,14 @@ export function useAuth() {
         .select('email')
         .eq('username', emailOrUsername.toLowerCase())
         .single();
-      
+
       if (profileError || !profile) {
-        return { 
-          data: null, 
-          error: { message: 'Username not found' } 
+        return {
+          data: null,
+          error: { message: 'Username not found' }
         };
       }
-      
+
       // Sign in with the found email
       const { data, error } = await supabase.auth.signInWithPassword({
         email: profile.email,
@@ -87,6 +89,41 @@ export function useAuth() {
     return { error };
   };
 
+  const signInWithApple = async () => {
+    if (Platform.OS !== 'ios') {
+      return { error: { message: 'Apple Sign-In is only available on iOS devices.' } };
+    }
+    try {
+      const appleAuthRequestResponse = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      const { identityToken, email, fullName, user } = appleAuthRequestResponse;
+      if (!identityToken) {
+        return { error: { message: 'Apple Sign-In failed: No identity token returned.' } };
+      }
+
+      // Use Supabase signInWithIdToken for Apple
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: identityToken,
+        nonce: undefined, // Expo handles nonce internally
+      });
+      return { data, error };
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_CANCELED') {
+        return { error: { message: 'Apple Sign-In was canceled.' } };
+      }
+      if (error instanceof Error) {
+        return { error: { message: error.message } };
+      }
+      return { error: { message: 'An unknown error occurred during Apple Sign-In.' } };
+    }
+  };
+
   return {
     session,
     user,
@@ -94,5 +131,6 @@ export function useAuth() {
     signUp,
     signIn,
     signOut,
+    signInWithApple, // Add this to the returned object
   };
 }
