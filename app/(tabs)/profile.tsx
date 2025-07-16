@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Users,
   UserPlus,
-  Dumbbell
+  Dumbbell,
+  BarChart3
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 

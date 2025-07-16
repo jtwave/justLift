@@ -95,26 +95,27 @@ export function ExerciseSearchModal({
     return matchesQuery && matchesForce && matchesMuscle && matchesEquipment;
   });
 
-  // Get recent exercises from workout history
+  // Get recent exercises from the last 7 completed workouts
   const recentExerciseIds = new Set();
   const recentExercises = [];
 
-  for (const workout of workoutHistory) {
+  // Only consider the most recent 7 workouts
+  const last7Workouts = workoutHistory.slice(0, 7);
+  for (const workout of last7Workouts) {
     for (const workoutExercise of workout.exercises) {
-      if (!recentExerciseIds.has(workoutExercise.exercise_id)) {
-        recentExerciseIds.add(workoutExercise.exercise_id);
-        const exercise = exercises.find(e => e.id === workoutExercise.exercise_id);
+      const exId = workoutExercise.exercise_id;
+      if (typeof exId === 'string' && exId.length > 0 && !recentExerciseIds.has(exId)) {
+        recentExerciseIds.add(exId);
+        const exercise = exercises.find(e => e.id === exId);
         if (exercise) {
           recentExercises.push(exercise);
         }
       }
-      if (recentExercises.length >= 10) break;
     }
-    if (recentExercises.length >= 10) break;
   }
 
   const displayedExercises = selectedTab === 'recent'
-    ? (searchQuery ? filteredExercises.filter(e => recentExerciseIds.has(e.id)) : recentExercises)
+    ? (searchQuery ? filteredExercises.filter(e => typeof e.id === 'string' && recentExerciseIds.has(e.id)) : recentExercises)
     : filteredExercises;
 
   const handleSelectExercise = (exerciseId: string) => {
