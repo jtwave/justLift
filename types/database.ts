@@ -245,7 +245,7 @@ export interface Database {
       workout_exercises: {
         Row: {
           id: string
-          workout_id: string 
+          workout_id: string
           exercise_id: string
           is_active: boolean
           rest_time: number
@@ -365,6 +365,7 @@ export interface Database {
           photo_url: string
           notes: string | null
           created_at: string
+          weight: number | null
         }
         Insert: {
           id?: string
@@ -372,6 +373,7 @@ export interface Database {
           photo_url: string
           notes?: string | null
           created_at?: string
+          weight?: number | null
         }
         Update: {
           id?: string
@@ -379,6 +381,7 @@ export interface Database {
           photo_url?: string
           notes?: string | null
           created_at?: string
+          weight?: number | null
         }
       }
       body_weight_entries: {

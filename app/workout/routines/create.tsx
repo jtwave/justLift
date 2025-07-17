@@ -152,13 +152,13 @@ export default function CreateRoutineScreen() {
       return;
     }
 
-    if (selectedExercises.length === 0) {
+    if (exerciseList.length === 0) {
       Alert.alert('Error', 'Please add at least one exercise');
       return;
     }
 
     try {
-      await createRoutine(routineName.trim(), description.trim() || null, selectedExercises);
+      await createRoutine(routineName.trim(), description.trim() || null, exerciseList.map(e => e.id));
       router.back();
     } catch (error) {
       Alert.alert('Error', 'Failed to create routine');
@@ -233,15 +233,15 @@ export default function CreateRoutineScreen() {
         <Text style={styles.headerTitle}>Create Routine</Text>
         <TouchableOpacity
           onPress={handleSave}
-          disabled={loading || !routineName.trim() || selectedExercises.length === 0}
+          disabled={loading || !routineName.trim() || exerciseList.length === 0}
           style={[
             styles.saveButton,
-            (!routineName.trim() || selectedExercises.length === 0) && styles.saveButtonDisabled
+            (!routineName.trim() || exerciseList.length === 0) && styles.saveButtonDisabled
           ]}
         >
           <Text style={[
             styles.saveButtonText,
-            (!routineName.trim() || selectedExercises.length === 0) && styles.saveButtonTextDisabled
+            (!routineName.trim() || exerciseList.length === 0) && styles.saveButtonTextDisabled
           ]}>
             Save
           </Text>

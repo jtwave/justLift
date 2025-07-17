@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
@@ -7,56 +7,219 @@ import { useWorkoutStore } from '@/store/workoutStore';
 import { useProgressStore } from '@/store/progressStore';
 import { BarChart3, Camera, Images as ImagesIcon, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
+import BodyMap from '@/components/BodyMap';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 48;
 const PHOTO_SIZE = (width - 72) / 3;
 
+// Fix linter errors by adding types
+function getHeaviestSet(workout: any) {
+    if (!workout.exercises) return 0;
+    let max = 0;
+    for (const ex of workout.exercises) {
+        if (ex.sets) {
+            for (const set of ex.sets) {
+                if (set.weight && set.weight > max) max = set.weight;
+            }
+        }
+    }
+    return max;
+}
+
+function getWorkoutFrequency(workoutHistory: any[]) {
+    // Count workouts per week for last 4 weeks
+    const now = new Date();
+    const weeks = [0, 0, 0, 0]; // 0 = this week, 1 = last week, etc.
+    for (const w of workoutHistory) {
+        const d = new Date(w.start_time);
+        const diffWeeks = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24 * 7));
+        if (diffWeeks < 4 && diffWeeks >= 0) weeks[3 - diffWeeks]++;
+    }
+    return weeks;
+}
+
 export default function StatsScreen() {
     const { workoutHistory } = useWorkoutStore();
     const { progressPhotos } = useProgressStore();
-    const [volumeData, setVolumeData] = useState<number[]>([]);
-    const [setsData, setSetsData] = useState<number[]>([]);
-    const [labels, setLabels] = useState<string[]>([]);
+    const [heaviestData, setHeaviestData] = useState<number[]>([]);
+    const [heaviestLabels, setHeaviestLabels] = useState<string[]>([]);
+    const [freqData, setFreqData] = useState<number[]>([]);
+    const [freqLabels, setFreqLabels] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState<'frequent' | 'attention'>('frequent');
+
+    // --- BodyMap aggregation logic ---
+    const muscleSetCounts = useMemo(() => {
+        // Only consider workouts from the last 30 days
+        const now = new Date();
+        const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
+        const recentWorkouts = workoutHistory.filter(w => now.getTime() - new Date(w.start_time).getTime() < THIRTY_DAYS);
+        const counts: Record<string, number> = {};
+        for (const workout of recentWorkouts) {
+            for (const ex of workout.exercises) {
+                const sets = ex.sets?.length || 0;
+                const primary = ex.exercise.primaryMuscles || [];
+                const secondary = ex.exercise.secondaryMuscles || [];
+                for (const muscle of primary) {
+                    counts[muscle] = (counts[muscle] || 0) + sets;
+                }
+                for (const muscle of secondary) {
+                    counts[muscle] = (counts[muscle] || 0) + Math.round(sets / 2); // secondary: half credit
+                }
+            }
+        }
+        return counts;
+    }, [workoutHistory]);
+
+    // --- Needs Attention logic ---
+    const allPossibleMuscles = useMemo(() => [
+        'Chest', 'Back', 'Biceps', 'Triceps', 'Shoulders', 'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Forearms', 'Traps', 'Lats', 'Adductors', 'Abductors', 'Deltoids', 'Rectus Abdominis', 'Latissimus Dorsi', 'Pectoralis Major', 'Trapezius'
+    ], []);
+    const avgSets = useMemo(() => {
+        const vals = Object.values(muscleSetCounts).filter(v => v > 0);
+        if (vals.length === 0) return 0;
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+    }, [muscleSetCounts]);
+    const needsAttention = useMemo(() => {
+        return allPossibleMuscles.filter(muscle => {
+            const count = muscleSetCounts[muscle] || muscleSetCounts[muscle.toLowerCase()] || 0;
+            return count === 0 || (avgSets > 0 && count < avgSets * 0.5);
+        });
+    }, [muscleSetCounts, avgSets, allPossibleMuscles]);
+
+    // Map set counts to color intensity (light blue to dark blue)
+    const muscleColors = useMemo(() => {
+        const max = Math.max(...Object.values(muscleSetCounts), 1);
+        const min = Math.min(...Object.values(muscleSetCounts), 0);
+        const colorScale = (val: number) => {
+            if (val === 0) return 'rgba(0,120,255,0.15)';
+            // interpolate light blue (few) to dark blue (many)
+            const pct = (val - min) / (max - min || 1);
+            // Light blue: rgb(180,210,255), Dark blue: rgb(0,80,200)
+            const r = Math.round(180 - pct * 180);
+            const g = Math.round(210 - pct * 130);
+            const b = Math.round(255 - pct * 55);
+            return `rgb(${r},${g},${b})`;
+        };
+        // Map muscle group names to BodyMap keys
+        const map: Record<string, string> = {
+            chest: 'chest',
+            'pectoralis major': 'chest',
+            back: 'back',
+            'latissimus dorsi': 'lats',
+            lats: 'lats',
+            biceps: 'biceps',
+            triceps: 'triceps',
+            shoulders: 'shoulders',
+            deltoids: 'shoulders',
+            abdominals: 'abs',
+            'rectus abdominis': 'abs',
+            abs: 'abs',
+            quadriceps: 'quads',
+            quads: 'quads',
+            hamstrings: 'hamstrings',
+            glutes: 'glutes',
+            calves: 'calves',
+            forearms: 'forearms',
+            traps: 'traps',
+            trapezius: 'traps',
+            adductors: 'quads',
+            abductors: 'quads',
+            // ...add more as needed
+        };
+        const result: Record<string, string> = {};
+        for (const [muscle, count] of Object.entries(muscleSetCounts)) {
+            const key = map[muscle.toLowerCase()];
+            if (key) result[key] = colorScale(count);
+        }
+        return result;
+    }, [muscleSetCounts]);
 
     useEffect(() => {
-        // Prepare data for the last 7 workouts
+        // Heaviest set per workout (last 7)
         const last7 = workoutHistory.slice(0, 7).reverse();
-        setLabels(last7.map(w => new Date(w.start_time).toLocaleDateString()));
-        setVolumeData(last7.map(w => {
-            if (!w.exercises) return 0;
-            return w.exercises.reduce((total: number, ex: any) =>
-                total + (ex.sets ? ex.sets.reduce((s: number, set: any) => s + ((set.weight || 0) * (set.reps || 0)), 0) : 0), 0);
-        }));
-        setSetsData(last7.map(w => {
-            if (!w.exercises) return 0;
-            return w.exercises.reduce((total: number, ex: any) =>
-                total + (ex.sets ? ex.sets.length : 0), 0);
+        setHeaviestLabels(last7.map(w => new Date(w.start_time).toLocaleDateString()));
+        setHeaviestData(last7.map(getHeaviestSet));
+        // Workout frequency (last 4 weeks)
+        setFreqData(getWorkoutFrequency(workoutHistory));
+        const now = new Date();
+        setFreqLabels([
+            ...Array(4).keys()
+        ].map(i => {
+            const d = new Date(now.getTime() - (3 - i) * 7 * 24 * 60 * 60 * 1000);
+            return `${d.getMonth() + 1}/${d.getDate()}`;
         }));
     }, [workoutHistory]);
+
+    // For 'Frequently Worked', show all muscle groups sorted by set count
+    const frequentlyWorked = useMemo(() => {
+        return Object.entries(muscleSetCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([muscle, count]) => ({ muscle, count }));
+    }, [muscleSetCounts]);
 
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
                 <Text style={styles.headerTitle}>Your Statistics</Text>
-                {/* Workout Volume Chart */}
+                {/* Swipeable Tabs for Muscle Groups */}
+                <View style={[styles.section, { marginBottom: 0 }]}>
+                    <View style={{ flexDirection: 'row', borderRadius: 8, overflow: 'hidden', marginBottom: 12, backgroundColor: Colors.cardBackground }}>
+                        <TouchableOpacity
+                            style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'frequent' ? Colors.accent : 'transparent', alignItems: 'center' }}
+                            onPress={() => setActiveTab('frequent')}
+                        >
+                            <Text style={{ color: activeTab === 'frequent' ? Colors.primary : Colors.secondary, fontWeight: '600' }}>Frequently Worked</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'attention' ? Colors.warning || '#ff9800' : 'transparent', alignItems: 'center' }}
+                            onPress={() => setActiveTab('attention')}
+                        >
+                            <Text style={{ color: activeTab === 'attention' ? Colors.primary : Colors.secondary, fontWeight: '600' }}>Needs Attention</Text>
+                        </TouchableOpacity>
+                    </View>
+                    {activeTab === 'frequent' ? (
+                        <ScrollView style={{ maxHeight: 220 }}>
+                            {frequentlyWorked.length > 0 ? frequentlyWorked.map(({ muscle, count }) => (
+                                <View key={muscle} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.divider }}>
+                                    <Text style={{ fontSize: 16, color: '#fff', fontWeight: '500' }}>{muscle.charAt(0).toUpperCase() + muscle.slice(1)}</Text>
+                                    <Text style={{ fontSize: 16, color: Colors.accent || '#2196f3', fontWeight: '700' }}>{count} sets</Text>
+                                </View>
+                            )) : (
+                                <Text style={{ color: Colors.secondary, textAlign: 'center', marginTop: 16 }}>No sets logged in the last 30 days.</Text>
+                            )}
+                        </ScrollView>
+                    ) : (
+                        <ScrollView style={{ maxHeight: 220 }}>
+                            {needsAttention.length > 0 ? needsAttention.map(muscle => (
+                                <View key={muscle} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.divider }}>
+                                    <Text style={{ fontSize: 16, color: '#fff', fontWeight: '600' }}>{muscle}</Text>
+                                    <Text style={{ fontSize: 16, color: Colors.warning || '#ff9800', fontWeight: '600' }}>{muscleSetCounts[muscle] || muscleSetCounts[muscle.toLowerCase()] || 0} sets</Text>
+                                </View>
+                            )) : (
+                                <Text style={{ color: Colors.secondary, textAlign: 'center', marginTop: 16 }}>All muscle groups are being worked well!</Text>
+                            )}
+                        </ScrollView>
+                    )}
+                </View>
+                {/* Heaviest Set Chart */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Workout Volume (Last 7 Workouts)</Text>
+                    <Text style={styles.sectionTitle}>Heaviest Set (Last 7 Workouts)</Text>
                     <BarChart
-                        data={volumeData}
-                        labels={labels}
+                        data={heaviestData}
+                        labels={heaviestLabels}
                         color={Colors.accent}
-                        label="Volume (lbs)"
+                        label="Heaviest Set (lbs)"
                     />
                 </View>
-                {/* Sets Chart */}
+                {/* Workout Frequency Chart */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Total Sets (Last 7 Workouts)</Text>
+                    <Text style={styles.sectionTitle}>Workout Frequency (Last 4 Weeks)</Text>
                     <BarChart
-                        data={setsData}
-                        labels={labels}
+                        data={freqData}
+                        labels={freqLabels}
                         color={Colors.primary}
-                        label="Sets"
+                        label="Workouts per Week"
                     />
                 </View>
                 {/* Progress Photos */}
@@ -78,6 +241,7 @@ export default function StatsScreen() {
                                     <Image source={{ uri: photo.photo_url }} style={styles.photo} />
                                     <Text style={styles.photoDate}>
                                         {new Date(photo.created_at).toLocaleDateString()}
+                                        {photo.weight ? `  |  ${photo.weight} lbs` : ''}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -212,6 +376,7 @@ const styles = StyleSheet.create({
     photoDate: {
         fontSize: FontSizes.caption,
         color: Colors.secondary,
+        textAlign: 'center',
     },
     emptyState: {
         alignItems: 'center',

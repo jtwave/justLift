@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Dimensions, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -15,6 +15,11 @@ export default function ProgressPhotosScreen() {
   const { progressPhotos, loadProgressPhotos, addProgressPhoto, deleteProgressPhoto } = useProgressStore();
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [compareMode, setCompareMode] = useState(false);
+  const [weightModalVisible, setWeightModalVisible] = useState(false);
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [pendingWeight, setPendingWeight] = useState<string>('');
+  const [compareModalVisible, setCompareModalVisible] = useState(false);
+  const [comparePhotos, setComparePhotos] = useState<any[]>([]);
 
   useEffect(() => {
     loadProgressPhotos();
@@ -36,7 +41,8 @@ export default function ProgressPhotosScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await addProgressPhoto(result.assets[0].uri);
+        setPendingPhotoUri(result.assets[0].uri);
+        setWeightModalVisible(true);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to take photo');
@@ -59,11 +65,27 @@ export default function ProgressPhotosScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await addProgressPhoto(result.assets[0].uri);
+        setPendingPhotoUri(result.assets[0].uri);
+        setWeightModalVisible(true);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to select photo');
     }
+  };
+
+  const handleAddPhotoWithWeight = async () => {
+    if (!pendingPhotoUri) return;
+    const weightNum = pendingWeight ? parseFloat(pendingWeight) : undefined;
+    await addProgressPhoto(pendingPhotoUri, undefined, weightNum);
+    setPendingPhotoUri(null);
+    setPendingWeight('');
+    setWeightModalVisible(false);
+  };
+
+  const handleCancelWeightModal = () => {
+    setPendingPhotoUri(null);
+    setPendingWeight('');
+    setWeightModalVisible(false);
   };
 
   const handlePhotoPress = (photoId: string) => {
@@ -72,6 +94,13 @@ export default function ProgressPhotosScreen() {
         setSelectedPhotos(selectedPhotos.filter(id => id !== photoId));
       } else if (selectedPhotos.length < 2) {
         setSelectedPhotos([...selectedPhotos, photoId]);
+      }
+      // Open compare modal if two selected
+      if (selectedPhotos.length === 1 && !selectedPhotos.includes(photoId)) {
+        const selected = [...selectedPhotos, photoId];
+        const photos = progressPhotos.filter(p => selected.includes(p.id));
+        setComparePhotos(photos);
+        setCompareModalVisible(true);
       }
     } else {
       // Open full screen view
@@ -128,7 +157,7 @@ export default function ProgressPhotosScreen() {
                     {compareMode ? 'Exit Compare' : 'Compare Mode'}
                   </Text>
                 </TouchableOpacity>
-                
+
                 {compareMode && selectedPhotos.length === 2 && (
                   <TouchableOpacity
                     style={styles.viewCompareButton}
@@ -158,6 +187,12 @@ export default function ProgressPhotosScreen() {
                   onPress={() => handlePhotoPress(photo.id)}
                 >
                   <Image source={{ uri: photo.photo_url }} style={styles.photo} />
+                  {/* Weight badge */}
+                  {photo.weight && (
+                    <View style={styles.weightBadge}>
+                      <Text style={styles.weightBadgeText}>{photo.weight} lbs</Text>
+                    </View>
+                  )}
                   <Text style={styles.photoDate}>
                     {new Date(photo.created_at).toLocaleDateString()}
                   </Text>
@@ -186,6 +221,68 @@ export default function ProgressPhotosScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={weightModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelWeightModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.weightModalContainer}>
+            <Text style={styles.weightModalTitle}>Enter Your Weight</Text>
+            <TextInput
+              style={styles.weightInput}
+              placeholder="Weight (lbs)"
+              placeholderTextColor={Colors.secondary}
+              keyboardType="numeric"
+              value={pendingWeight}
+              onChangeText={setPendingWeight}
+              maxLength={5}
+            />
+            <View style={styles.weightModalButtons}>
+              <TouchableOpacity style={styles.weightModalButton} onPress={handleCancelWeightModal}>
+                <Text style={styles.weightModalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.weightModalButton, { backgroundColor: Colors.accent }]}
+                onPress={handleAddPhotoWithWeight}
+                disabled={!pendingPhotoUri}
+              >
+                <Text style={[styles.weightModalButtonText, { color: Colors.primary }]}>Add Photo</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Compare Modal */}
+      <Modal
+        visible={compareModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCompareModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.compareModalContainer}>
+            <Text style={styles.compareModalTitle}>Compare Progress Photos</Text>
+            <View style={styles.comparePhotosRow}>
+              {comparePhotos.map((photo, idx) => (
+                <View key={photo.id} style={styles.comparePhotoCol}>
+                  <Image source={{ uri: photo.photo_url }} style={styles.comparePhoto} />
+                  <Text style={styles.comparePhotoDate}>{new Date(photo.created_at).toLocaleDateString()}</Text>
+                  {photo.weight && (
+                    <Text style={styles.comparePhotoWeight}>{photo.weight} lbs</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.closeCompareButton} onPress={() => setCompareModalVisible(false)}>
+              <Text style={styles.closeCompareButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -336,5 +433,122 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.body,
     fontWeight: FontWeights.medium,
     color: Colors.primary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weightModalContainer: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 24,
+    width: 320,
+    alignItems: 'center',
+  },
+  weightModalTitle: {
+    fontSize: FontSizes.sectionHeader,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primary,
+    marginBottom: 16,
+  },
+  weightInput: {
+    width: '100%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: 12,
+    fontSize: FontSizes.body,
+    color: Colors.primary,
+    marginBottom: 20,
+    backgroundColor: Colors.background,
+    textAlign: 'center',
+  },
+  weightModalButtons: {
+    flexDirection: 'row',
+    gap: 16,
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  weightModalButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    marginHorizontal: 4,
+  },
+  weightModalButtonText: {
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
+    fontWeight: FontWeights.medium,
+  },
+  weightBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: Colors.accent,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    zIndex: 2,
+  },
+  weightBadgeText: {
+    color: Colors.primary,
+    fontSize: FontSizes.caption,
+    fontWeight: FontWeights.bold,
+  },
+  compareModalContainer: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 24,
+    width: 340,
+    alignItems: 'center',
+  },
+  compareModalTitle: {
+    fontSize: FontSizes.sectionHeader,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primary,
+    marginBottom: 16,
+  },
+  comparePhotosRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 16,
+  },
+  comparePhotoCol: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  comparePhoto: {
+    width: 120,
+    height: 160,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  comparePhotoDate: {
+    fontSize: FontSizes.caption,
+    color: Colors.secondary,
+    marginBottom: 2,
+  },
+  comparePhotoWeight: {
+    fontSize: FontSizes.body,
+    color: Colors.accent,
+    fontWeight: FontWeights.bold,
+  },
+  closeCompareButton: {
+    marginTop: 12,
+    backgroundColor: Colors.accent,
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  closeCompareButtonText: {
+    color: Colors.primary,
+    fontWeight: FontWeights.medium,
+    fontSize: FontSizes.body,
   },
 });

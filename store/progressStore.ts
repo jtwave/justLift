@@ -23,10 +23,10 @@ interface ProgressStore {
   exerciseProgress: ExerciseProgress[];
   loading: boolean;
   error: string | null;
-  
+
   // Actions
   loadProgressPhotos: () => Promise<void>;
-  addProgressPhoto: (photoUrl: string, notes?: string) => Promise<void>;
+  addProgressPhoto: (photoUrl: string, notes?: string, weight?: number) => Promise<void>;
   deleteProgressPhoto: (photoId: string) => Promise<void>;
   loadExerciseProgress: () => Promise<void>;
   getExerciseProgress: (exerciseId: string) => ExerciseProgress | null;
@@ -65,7 +65,7 @@ export const useProgressStore = create<ProgressStore>((set, get) => ({
     }
   },
 
-  addProgressPhoto: async (photoUrl: string, notes?: string) => {
+  addProgressPhoto: async (photoUrl: string, notes?: string, weight?: number) => {
     try {
       set({ loading: true, error: null });
       const { data: user } = await supabase.auth.getUser();
@@ -77,6 +77,7 @@ export const useProgressStore = create<ProgressStore>((set, get) => ({
           user_id: user.user.id,
           photo_url: photoUrl,
           notes: notes || null,
+          weight: typeof weight === 'number' ? weight : null,
         })
         .select()
         .single();
@@ -144,7 +145,7 @@ export const useProgressStore = create<ProgressStore>((set, get) => ({
         workout.workout_exercises.forEach(workoutExercise => {
           const exerciseId = workoutExercise.exercise_id;
           const exercise = workoutExercise.exercise;
-          
+
           if (!exerciseMap.has(exerciseId)) {
             exerciseMap.set(exerciseId, {
               exerciseId,
