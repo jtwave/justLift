@@ -10,12 +10,24 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthScreen } from '@/components/AuthScreen';
 import { ThemeProvider } from '../components/ThemeProvider';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 SplashScreen.preventAutoHideAsync();
+
+// Configure notifications for background timer
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -34,6 +46,22 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  // Request notification permissions for background timer
+  useEffect(() => {
+    const requestNotificationPermissions = async () => {
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== 'granted') {
+          console.log('Notification permissions not granted');
+        }
+      } catch (error) {
+        console.error('Error requesting notification permissions:', error);
+      }
+    };
+
+    requestNotificationPermissions();
+  }, []);
 
   if (!fontsLoaded && !fontError) {
     return null;
