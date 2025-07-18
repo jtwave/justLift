@@ -36,7 +36,7 @@ interface WorkoutStore {
   getWorkoutStartTime: () => number | null;
   addExercise: (exerciseId: string) => Promise<void>;
   removeExercise: (workoutExerciseId: string) => Promise<void>;
-  logSet: (workoutExerciseId: string, setData: Omit<WorkoutSet, 'id' | 'workout_exercise_id' | 'created_at'>) => Promise<void>;
+  logSet: (workoutExerciseId: string, setData: any) => Promise<void>;
   addWorkoutSet: (workoutExerciseId: string, setData: Omit<WorkoutSet, 'id' | 'workout_exercise_id' | 'created_at'>) => Promise<void>;
   setActiveExercise: (workoutExerciseId: string) => Promise<void>;
   getPreviousSetData: (exerciseId: string, setNumber: number) => PreviousSetData | null;
@@ -399,7 +399,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }
   },
 
-  logSet: async (workoutExerciseId: string, setData) => {
+  logSet: async (workoutExerciseId: string, setData: any) => {
     try {
       const { currentWorkout } = get();
       if (!currentWorkout) return;
@@ -429,7 +429,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }
   },
 
-  addWorkoutSet: async (workoutExerciseId: string, setData) => {
+  addWorkoutSet: async (workoutExerciseId: string, setData: Omit<WorkoutSet, 'id' | 'workout_exercise_id' | 'created_at'>) => {
     try {
       const { currentWorkout } = get();
       if (!currentWorkout) return;
@@ -659,7 +659,36 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       set({ loading: true, error: null });
       console.log('Discarding workout:', workoutId);
 
-      // Delete the workout entirely
+      // First, get all workout exercises for this workout
+      const { data: workoutExercises, error: exercisesError } = await supabase
+        .from('workout_exercises')
+        .select('id')
+        .eq('workout_id', workoutId);
+
+      if (exercisesError) throw exercisesError;
+
+      // Delete all workout sets for this workout's exercises
+      if (workoutExercises && workoutExercises.length > 0) {
+        const exerciseIds = workoutExercises.map((we: any) => we.id);
+        const { error: setsError } = await supabase
+          .from('workout_sets')
+          .delete()
+          .in('workout_exercise_id', exerciseIds);
+
+        if (setsError) throw setsError;
+        console.log('Deleted workout sets');
+      }
+
+      // Delete all workout exercises for this workout
+      const { error: deleteExercisesError } = await supabase
+        .from('workout_exercises')
+        .delete()
+        .eq('workout_id', workoutId);
+
+      if (deleteExercisesError) throw deleteExercisesError;
+      console.log('Deleted workout exercises');
+
+      // Finally, delete the workout itself
       const { error } = await supabase
         .from('workouts')
         .delete()
@@ -667,15 +696,19 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
       if (error) throw error;
       console.log('Workout discarded successfully');
-      console.log('Workout details updated successfully');
 
+      // Clear current workout immediately
       set({ currentWorkout: null });
 
-      // Reload workout history to ensure consistency
+      // Remove the deleted workout from the local workout history
+      const { workoutHistory } = get();
+      const updatedWorkoutHistory = workoutHistory.filter(w => w.id !== workoutId);
+      set({ workoutHistory: updatedWorkoutHistory });
+
+      // Also reload workout history from database to ensure consistency
       await get().loadWorkoutHistory();
     } catch (error) {
       console.error('Error discarding workout:', error);
-      console.error('Error updating workout details:', error);
       set({ error: (error as Error).message });
     } finally {
       set({ loading: false });

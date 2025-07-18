@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -40,13 +40,49 @@ function getWorkoutFrequency(workoutHistory: any[]) {
 }
 
 export default function StatsScreen() {
-    const { workoutHistory } = useWorkoutStore();
-    const { progressPhotos } = useProgressStore();
+    const { workoutHistory, loadWorkoutHistory } = useWorkoutStore();
+    const { progressPhotos, loadProgressPhotos } = useProgressStore();
     const [heaviestData, setHeaviestData] = useState<number[]>([]);
     const [heaviestLabels, setHeaviestLabels] = useState<string[]>([]);
     const [freqData, setFreqData] = useState<number[]>([]);
     const [freqLabels, setFreqLabels] = useState<string[]>([]);
     const [activeTab, setActiveTab] = useState<'frequent' | 'attention'>('frequent');
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Load workout history and progress photos when component mounts
+    useEffect(() => {
+        const loadData = async () => {
+            setLoading(true);
+            try {
+                await Promise.all([
+                    loadWorkoutHistory(),
+                    loadProgressPhotos()
+                ]);
+            } catch (error) {
+                console.error('Error loading data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadData();
+    }, [loadWorkoutHistory, loadProgressPhotos]);
+
+    // Handle pull-to-refresh
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                loadWorkoutHistory(),
+                loadProgressPhotos()
+            ]);
+        } catch (error) {
+            console.error('Error refreshing data:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     // --- BodyMap aggregation logic ---
     const muscleSetCounts = useMemo(() => {
@@ -160,106 +196,127 @@ export default function StatsScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={{ paddingBottom: 40 }}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={[Colors.accent]}
+                        tintColor={Colors.accent}
+                    />
+                }
+            >
                 <Text style={styles.headerTitle}>Your Statistics</Text>
-                {/* Swipeable Tabs for Muscle Groups */}
-                <View style={[styles.section, { marginBottom: 0 }]}>
-                    <View style={{ flexDirection: 'row', borderRadius: 8, overflow: 'hidden', marginBottom: 12, backgroundColor: Colors.cardBackground }}>
-                        <TouchableOpacity
-                            style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'frequent' ? Colors.accent : 'transparent', alignItems: 'center' }}
-                            onPress={() => setActiveTab('frequent')}
-                        >
-                            <Text style={{ color: activeTab === 'frequent' ? Colors.primary : Colors.secondary, fontWeight: '600' }}>Frequently Worked</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'attention' ? Colors.warning || '#ff9800' : 'transparent', alignItems: 'center' }}
-                            onPress={() => setActiveTab('attention')}
-                        >
-                            <Text style={{ color: activeTab === 'attention' ? Colors.primary : Colors.secondary, fontWeight: '600' }}>Needs Attention</Text>
-                        </TouchableOpacity>
+
+                {loading ? (
+                    <View style={styles.loadingContainer}>
+                        <Text style={styles.loadingText}>Loading your workout statistics...</Text>
                     </View>
-                    {activeTab === 'frequent' ? (
-                        <ScrollView style={{ maxHeight: 220 }}>
-                            {frequentlyWorked.length > 0 ? frequentlyWorked.map(({ muscle, count }) => (
-                                <View key={muscle} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.divider }}>
-                                    <Text style={{ fontSize: 16, color: '#fff', fontWeight: '500' }}>{muscle.charAt(0).toUpperCase() + muscle.slice(1)}</Text>
-                                    <Text style={{ fontSize: 16, color: Colors.accent || '#2196f3', fontWeight: '700' }}>{count} sets</Text>
-                                </View>
-                            )) : (
-                                <Text style={{ color: Colors.secondary, textAlign: 'center', marginTop: 16 }}>No sets logged in the last 30 days.</Text>
-                            )}
-                        </ScrollView>
-                    ) : (
-                        <ScrollView style={{ maxHeight: 220 }}>
-                            {needsAttention.length > 0 ? needsAttention.map(muscle => (
-                                <View key={muscle} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.divider }}>
-                                    <Text style={{ fontSize: 16, color: '#fff', fontWeight: '600' }}>{muscle}</Text>
-                                    <Text style={{ fontSize: 16, color: Colors.warning || '#ff9800', fontWeight: '600' }}>{muscleSetCounts[muscle] || muscleSetCounts[muscle.toLowerCase()] || 0} sets</Text>
-                                </View>
-                            )) : (
-                                <Text style={{ color: Colors.secondary, textAlign: 'center', marginTop: 16 }}>All muscle groups are being worked well!</Text>
-                            )}
-                        </ScrollView>
-                    )}
-                </View>
-                {/* Heaviest Set Chart */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Heaviest Set (Last 7 Workouts)</Text>
-                    <BarChart
-                        data={heaviestData}
-                        labels={heaviestLabels}
-                        color={Colors.accent}
-                        label="Heaviest Set (lbs)"
-                    />
-                </View>
-                {/* Workout Frequency Chart */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Workout Frequency (Last 4 Weeks)</Text>
-                    <BarChart
-                        data={freqData}
-                        labels={freqLabels}
-                        color={Colors.primary}
-                        label="Workouts per Week"
-                    />
-                </View>
-                {/* Progress Photos */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeaderRow}>
-                        <Text style={styles.sectionTitle}>Body Progress Photos</Text>
-                        <TouchableOpacity onPress={() => router.push('/profile/photos')}>
-                            <Text style={styles.seeAllText}>See All</Text>
-                        </TouchableOpacity>
-                    </View>
-                    {progressPhotos.length > 0 ? (
-                        <View style={styles.photoGrid}>
-                            {progressPhotos.slice(0, 6).map((photo) => (
+                ) : (
+                    <>
+                        {/* Swipeable Tabs for Muscle Groups */}
+                        <View style={[styles.section, { marginBottom: 0 }]}>
+                            <View style={{ flexDirection: 'row', borderRadius: 8, overflow: 'hidden', marginBottom: 12, backgroundColor: Colors.cardBackground }}>
                                 <TouchableOpacity
-                                    key={photo.id}
-                                    style={styles.photoContainer}
-                                    onPress={() => router.push(`/profile/photos/${photo.id}`)}
+                                    style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'frequent' ? Colors.accent : 'transparent', alignItems: 'center' }}
+                                    onPress={() => setActiveTab('frequent')}
                                 >
-                                    <Image source={{ uri: photo.photo_url }} style={styles.photo} />
-                                    <Text style={styles.photoDate}>
-                                        {new Date(photo.created_at).toLocaleDateString()}
-                                        {photo.weight ? `  |  ${photo.weight} lbs` : ''}
-                                    </Text>
+                                    <Text style={{ color: activeTab === 'frequent' ? Colors.primary : Colors.secondary, fontWeight: '600' }}>Frequently Worked</Text>
                                 </TouchableOpacity>
-                            ))}
+                                <TouchableOpacity
+                                    style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'attention' ? Colors.warning || '#ff9800' : 'transparent', alignItems: 'center' }}
+                                    onPress={() => setActiveTab('attention')}
+                                >
+                                    <Text style={{ color: activeTab === 'attention' ? Colors.primary : Colors.secondary, fontWeight: '600' }}>Needs Attention</Text>
+                                </TouchableOpacity>
+                            </View>
+                            {activeTab === 'frequent' ? (
+                                <ScrollView style={{ maxHeight: 220 }}>
+                                    {frequentlyWorked.length > 0 ? frequentlyWorked.map(({ muscle, count }) => (
+                                        <View key={muscle} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.divider }}>
+                                            <Text style={{ fontSize: 16, color: '#fff', fontWeight: '500' }}>{muscle.charAt(0).toUpperCase() + muscle.slice(1)}</Text>
+                                            <Text style={{ fontSize: 16, color: Colors.accent || '#2196f3', fontWeight: '700' }}>{count} sets</Text>
+                                        </View>
+                                    )) : (
+                                        <Text style={{ color: Colors.secondary, textAlign: 'center', marginTop: 16 }}>No sets logged in the last 30 days.</Text>
+                                    )}
+                                </ScrollView>
+                            ) : (
+                                <ScrollView style={{ maxHeight: 220 }}>
+                                    {needsAttention.length > 0 ? needsAttention.map(muscle => (
+                                        <View key={muscle} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.divider }}>
+                                            <Text style={{ fontSize: 16, color: '#fff', fontWeight: '600' }}>{muscle}</Text>
+                                            <Text style={{ fontSize: 16, color: Colors.warning || '#ff9800', fontWeight: '600' }}>{muscleSetCounts[muscle] || muscleSetCounts[muscle.toLowerCase()] || 0} sets</Text>
+                                        </View>
+                                    )) : (
+                                        <Text style={{ color: Colors.secondary, textAlign: 'center', marginTop: 16 }}>All muscle groups are being worked well!</Text>
+                                    )}
+                                </ScrollView>
+                            )}
                         </View>
-                    ) : (
-                        <View style={styles.emptyState}>
-                            <ImagesIcon size={48} color={Colors.secondary} />
-                            <Text style={styles.emptyStateTitle}>No Progress Photos</Text>
-                            <Text style={styles.emptyStateText}>
-                                Start documenting your transformation by taking your first progress photo.
-                            </Text>
-                            <TouchableOpacity style={styles.emptyStateButton} onPress={() => router.push('/profile/photos')}>
-                                <Camera size={20} color={Colors.primary} />
-                                <Text style={styles.emptyStateButtonText}>Add Photo</Text>
-                            </TouchableOpacity>
+                        {/* Heaviest Set Chart */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Heaviest Set (Last 7 Workouts)</Text>
+                            <BarChart
+                                data={heaviestData}
+                                labels={heaviestLabels}
+                                color={Colors.accent}
+                                label="Heaviest Set (lbs)"
+                            />
                         </View>
-                    )}
-                </View>
+                        {/* Workout Frequency Chart */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Workout Frequency (Last 4 Weeks)</Text>
+                            <BarChart
+                                data={freqData}
+                                labels={freqLabels}
+                                color={Colors.primary}
+                                label="Workouts per Week"
+                            />
+                        </View>
+                        {/* Progress Photos */}
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeaderRow}>
+                                <Text style={styles.sectionTitle}>Body Progress Photos</Text>
+                                <TouchableOpacity onPress={() => router.push('/profile/photos')}>
+                                    <Text style={styles.seeAllText}>See All</Text>
+                                </TouchableOpacity>
+                            </View>
+                            {progressPhotos.length > 0 ? (
+                                <View style={styles.photoGrid}>
+                                    {progressPhotos.slice(0, 6).map((photo) => (
+                                        <TouchableOpacity
+                                            key={photo.id}
+                                            style={styles.photoContainer}
+                                            onPress={() => router.push(`/profile/photos/${photo.id}`)}
+                                        >
+                                            <Image source={{ uri: photo.photo_url }} style={styles.photo} />
+                                            <Text style={styles.photoDate}>
+                                                {new Date(photo.created_at).toLocaleDateString()}
+                                                {photo.weight ? `  |  ${photo.weight} lbs` : ''}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : (
+                                <View style={styles.emptyState}>
+                                    <ImagesIcon size={48} color={Colors.secondary} />
+                                    <Text style={styles.emptyStateTitle}>No Progress Photos</Text>
+                                    <Text style={styles.emptyStateText}>
+                                        Start documenting your transformation by taking your first progress photo.
+                                    </Text>
+                                    <TouchableOpacity style={styles.emptyStateButton} onPress={() => router.push('/profile/photos')}>
+                                        <Camera size={20} color={Colors.primary} />
+                                        <Text style={styles.emptyStateButtonText}>Add Photo</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    </>
+                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -412,5 +469,16 @@ const styles = StyleSheet.create({
         fontWeight: FontWeights.medium,
         fontSize: FontSizes.body,
         marginLeft: 8,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 20,
+    },
+    loadingText: {
+        fontSize: FontSizes.body,
+        color: Colors.secondary,
+        fontWeight: FontWeights.medium,
     },
 }); 

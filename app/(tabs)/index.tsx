@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl, Dimensions, FlatList, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl, Dimensions, FlatList, Platform, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
+import { useWorkoutStore } from '@/store/workoutStore';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { router } from 'expo-router';
 import { Heart, MessageCircle, User, Clock, Dumbbell, Search, Play, Volume2, VolumeX, MoveHorizontal as MoreHorizontal, Trash2 } from 'lucide-react-native';
@@ -27,6 +28,11 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
   const [showOptions, setShowOptions] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const { saveWorkoutAsRoutine } = useWorkoutStore();
+  const [showSaveRoutine, setShowSaveRoutine] = useState(false);
+  const [routineName, setRoutineName] = useState('');
+  const [routineDescription, setRoutineDescription] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const formatWorkoutDuration = (startTime: string, endTime: string | null) => {
     if (!endTime) return 'In progress';
@@ -55,6 +61,25 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
     return exercises.reduce((total, exercise) =>
       total + exercise.sets.reduce((setTotal: number, set: any) =>
         setTotal + (set.completed ? set.weight * set.reps : 0), 0), 0);
+  };
+
+  const handleSaveAsRoutine = async () => {
+    if (!routineName.trim()) {
+      Alert.alert('Error', 'Please enter a routine name');
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveWorkoutAsRoutine(post.workout.id, routineName.trim(), routineDescription.trim() || undefined);
+      setShowSaveRoutine(false);
+      setRoutineName('');
+      setRoutineDescription('');
+      Alert.alert('Success', 'Workout saved as routine!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save routine');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Create swipeable items array
@@ -130,55 +155,116 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
     }
 
     // Workout details
-    return (
-      <View style={styles.workoutDetailsContainer}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.workoutInfo}>
-            <Text style={styles.workoutName}>{item.data.name}</Text>
-            <View style={styles.workoutStats}>
-              <View style={styles.statItem}>
-                <Clock size={16} color={Colors.accent} />
-                <Text style={styles.statText}>
-                  {formatWorkoutDuration(post.workout.start_time, post.workout.end_time)}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Dumbbell size={16} color={Colors.accent} />
-                <Text style={styles.statText}>
-                  {post.workout.exercises.length} exercises
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statText}>
-                  {getTotalSets(post.workout.exercises)} sets
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statText}>
-                  {Math.round(getTotalVolume(post.workout.exercises) / 1000)}K lbs
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Exercise List */}
-          <View style={styles.exerciseList}>
-            {post.workout.exercises.map((exercise: any, exerciseIndex: number) => (
-              <View key={exerciseIndex} style={styles.exerciseItem}>
-                <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
-                <View style={styles.exerciseSets}>
-                  {exercise.sets.filter((set: any) => set.completed).map((set: any, setIndex: number) => (
-                    <Text key={setIndex} style={styles.setInfo}>
-                      {set.weight} lbs × {set.reps}
-                    </Text>
-                  ))}
+    if (item.type === 'workout') {
+      return (
+        <View style={styles.workoutDetailsContainer}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.workoutInfo}>
+              <Text style={styles.workoutName}>{item.data.name}</Text>
+              <View style={styles.workoutStats}>
+                <View style={styles.statItem}>
+                  <Clock size={16} color={Colors.accent} />
+                  <Text style={styles.statText}>
+                    {formatWorkoutDuration(post.workout.start_time, post.workout.end_time)}
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Dumbbell size={16} color={Colors.accent} />
+                  <Text style={styles.statText}>
+                    {post.workout.exercises.length} exercises
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statText}>
+                    {getTotalSets(post.workout.exercises)} sets
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statText}>
+                    {Math.round(getTotalVolume(post.workout.exercises) / 1000)}K lbs
+                  </Text>
                 </View>
               </View>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
-    );
+            </View>
+
+            {/* Exercise List */}
+            <View style={styles.exerciseList}>
+              {post.workout.exercises.map((exercise: any, exerciseIndex: number) => (
+                <View key={exerciseIndex} style={styles.exerciseItem}>
+                  <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
+                  <View style={styles.exerciseSets}>
+                    {exercise.sets.filter((set: any) => set.completed).map((set: any, setIndex: number) => (
+                      <Text key={setIndex} style={styles.setInfo}>
+                        {set.weight} lbs × {set.reps}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+            {/* Save as Routine Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: Colors.accent,
+                borderRadius: 8,
+                padding: 12,
+                marginTop: 16,
+                alignItems: 'center',
+              }}
+              onPress={() => setShowSaveRoutine(true)}
+            >
+              <Text style={{ color: Colors.primary, fontWeight: 'bold', fontSize: 16 }}>
+                Save as Routine
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+          {/* Save as Routine Modal */}
+          <Modal visible={showSaveRoutine} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowSaveRoutine(false)}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+              <View style={{ padding: 24 }}>
+                <Text style={{ fontSize: 22, fontWeight: 'bold', color: Colors.primary, marginBottom: 16 }}>Save as Routine</Text>
+                <Text style={{ color: Colors.secondary, marginBottom: 8 }}>Routine Name *</Text>
+                <View style={{ backgroundColor: Colors.cardBackground, borderRadius: 8, marginBottom: 16 }}>
+                  <TextInput
+                    style={{ color: Colors.primary, fontSize: 18, padding: 12 }}
+                    value={routineName}
+                    onChangeText={setRoutineName}
+                    placeholder="e.g., Push Day, Upper Body"
+                    placeholderTextColor={Colors.secondary}
+                  />
+                </View>
+                <Text style={{ color: Colors.secondary, marginBottom: 8 }}>Description (Optional)</Text>
+                <View style={{ backgroundColor: Colors.cardBackground, borderRadius: 8, marginBottom: 24 }}>
+                  <TextInput
+                    style={{ color: Colors.primary, fontSize: 16, padding: 12, minHeight: 60 }}
+                    value={routineDescription}
+                    onChangeText={setRoutineDescription}
+                    placeholder="Brief description of this routine..."
+                    placeholderTextColor={Colors.secondary}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 12, opacity: saving ? 0.7 : 1 }}
+                  onPress={handleSaveAsRoutine}
+                  disabled={saving}
+                >
+                  <Text style={{ color: Colors.primary, fontWeight: 'bold', fontSize: 16 }}>{saving ? 'Saving...' : 'Save'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ alignItems: 'center', padding: 10 }}
+                  onPress={() => setShowSaveRoutine(false)}
+                  disabled={saving}
+                >
+                  <Text style={{ color: Colors.secondary, fontSize: 16 }}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          </Modal>
+        </View>
+      );
+    }
   };
 
   return (

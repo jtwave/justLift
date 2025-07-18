@@ -248,7 +248,12 @@ export default function ActiveWorkoutScreen() {
   };
 
   const handleDeleteWorkout = () => {
-    if (!currentWorkout) return;
+    if (!currentWorkout) {
+      console.log('No current workout to delete');
+      return;
+    }
+
+    console.log('Attempting to delete workout:', currentWorkout.id);
 
     Alert.alert(
       'Delete Workout',
@@ -260,11 +265,16 @@ export default function ActiveWorkoutScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('User confirmed deletion, calling discardWorkout...');
               await discardWorkout(currentWorkout.id);
+              console.log('Workout deleted successfully');
               resetTimer();
+
+              // Navigate back to the workout tab and refresh
               router.replace('/(tabs)/workout');
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete workout. Please try again.');
+              console.error('Error deleting workout:', error);
+              Alert.alert('Error', `Failed to delete workout: ${(error as Error).message}`);
             }
           }
         }

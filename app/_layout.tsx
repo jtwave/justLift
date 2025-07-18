@@ -15,6 +15,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthScreen } from '@/components/AuthScreen';
 import { ThemeProvider } from '../components/ThemeProvider';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { NotificationService } from '@/services/notificationService';
+import { useNotificationStore } from '@/store/notificationStore';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -40,6 +42,7 @@ export default function RootLayout() {
   });
 
   const { user, loading } = useAuth();
+  const { loadPreferences } = useNotificationStore();
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
@@ -47,21 +50,35 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // Request notification permissions for background timer
+  // Request notification permissions and initialize listeners
   useEffect(() => {
-    const requestNotificationPermissions = async () => {
+    const initializeNotifications = async () => {
       try {
+        // Request permissions
         const { status } = await Notifications.requestPermissionsAsync();
         if (status !== 'granted') {
           console.log('Notification permissions not granted');
         }
+
+        // Initialize notification listeners
+        const cleanup = NotificationService.initializeListeners();
+
+        // Load notification preferences if user is authenticated
+        if (user) {
+          await loadPreferences();
+        }
+
+        return cleanup;
       } catch (error) {
-        console.error('Error requesting notification permissions:', error);
+        console.error('Error initializing notifications:', error);
       }
     };
 
-    requestNotificationPermissions();
-  }, []);
+    const cleanup = initializeNotifications();
+    return () => {
+      cleanup.then(cleanupFn => cleanupFn?.());
+    };
+  }, [user]);
 
   if (!fontsLoaded && !fontError) {
     return null;

@@ -1,0 +1,180 @@
+import { create } from 'zustand';
+import { supabase } from '@/lib/supabase';
+import { Database } from '@/types/database';
+
+type Notification = Database['public']['Tables']['notifications']['Row'];
+type NotificationPreferences = Database['public']['Tables']['notification_preferences']['Row'];
+
+interface NotificationStore {
+    notifications: Notification[];
+    preferences: NotificationPreferences | null;
+    loading: boolean;
+    error: string | null;
+
+    // Actions
+    loadNotifications: () => Promise<void>;
+    loadPreferences: () => Promise<void>;
+    markAsRead: (notificationIds: string[]) => Promise<void>;
+    markAllAsRead: () => Promise<void>;
+    updatePreferences: (preferences: Partial<NotificationPreferences>) => Promise<void>;
+    getUnreadCount: () => number;
+    clearNotifications: () => void;
+}
+
+export const useNotificationStore = create<NotificationStore>((set, get) => ({
+    notifications: [],
+    preferences: null,
+    loading: false,
+    error: null,
+
+    loadNotifications: async () => {
+        try {
+            set({ loading: true, error: null });
+            const { data: user } = await supabase.auth.getUser();
+            if (!user.user) return;
+
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', user.user.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (error) throw error;
+            set({ notifications: data || [] });
+        } catch (error) {
+            set({ error: (error as Error).message });
+        } finally {
+            set({ loading: false });
+        }
+    },
+
+    loadPreferences: async () => {
+        try {
+            set({ loading: true, error: null });
+            const { data: user } = await supabase.auth.getUser();
+            if (!user.user) return;
+
+            const { data, error } = await supabase
+                .from('notification_preferences')
+                .select('*')
+                .eq('user_id', user.user.id)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+
+            // If no preferences exist, create default ones
+            if (!data) {
+                const { data: newPreferences, error: insertError } = await supabase
+                    .from('notification_preferences')
+                    .insert({
+                        user_id: user.user.id,
+                        comments_enabled: true,
+                        likes_enabled: true,
+                        new_posts_enabled: true,
+                        follows_enabled: true,
+                        push_enabled: true,
+                        email_enabled: false,
+                    })
+                    .select()
+                    .single();
+
+                if (insertError) throw insertError;
+                set({ preferences: newPreferences });
+            } else {
+                set({ preferences: data });
+            }
+        } catch (error) {
+            set({ error: (error as Error).message });
+        } finally {
+            set({ loading: false });
+        }
+    },
+
+    markAsRead: async (notificationIds: string[]) => {
+        try {
+            set({ loading: true, error: null });
+            const { data: user } = await supabase.auth.getUser();
+            if (!user.user) return;
+
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', user.user.id)
+                .in('id', notificationIds);
+
+            if (error) throw error;
+
+            // Update local state
+            set({
+                notifications: get().notifications.map(notification =>
+                    notificationIds.includes(notification.id)
+                        ? { ...notification, is_read: true }
+                        : notification
+                )
+            });
+        } catch (error) {
+            set({ error: (error as Error).message });
+        } finally {
+            set({ loading: false });
+        }
+    },
+
+    markAllAsRead: async () => {
+        try {
+            set({ loading: true, error: null });
+            const { data: user } = await supabase.auth.getUser();
+            if (!user.user) return;
+
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', user.user.id)
+                .eq('is_read', false);
+
+            if (error) throw error;
+
+            // Update local state
+            set({
+                notifications: get().notifications.map(notification => ({
+                    ...notification,
+                    is_read: true
+                }))
+            });
+        } catch (error) {
+            set({ error: (error as Error).message });
+        } finally {
+            set({ loading: false });
+        }
+    },
+
+    updatePreferences: async (preferences: Partial<NotificationPreferences>) => {
+        try {
+            set({ loading: true, error: null });
+            const { data: user } = await supabase.auth.getUser();
+            if (!user.user) return;
+
+            const { data, error } = await supabase
+                .from('notification_preferences')
+                .update(preferences)
+                .eq('user_id', user.user.id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            set({ preferences: data });
+        } catch (error) {
+            set({ error: (error as Error).message });
+        } finally {
+            set({ loading: false });
+        }
+    },
+
+    getUnreadCount: () => {
+        return get().notifications.filter(notification => !notification.is_read).length;
+    },
+
+    clearNotifications: () => {
+        set({ notifications: [] });
+    },
+})); 

@@ -5,6 +5,7 @@ import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotificationStore } from '@/store/notificationStore';
 import { router, useFocusEffect } from 'expo-router';
 import {
   Settings,
@@ -13,7 +14,8 @@ import {
   Users,
   UserPlus,
   Dumbbell,
-  BarChart3
+  BarChart3,
+  Bell
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
@@ -22,9 +24,11 @@ const { width } = Dimensions.get('window');
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { following, followers, loadFollowing, loadFollowers } = useSocialStore();
+  const { getUnreadCount, loadNotifications } = useNotificationStore();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Load profile when screen comes into focus, but only if we don't have data
   useFocusEffect(
@@ -32,13 +36,21 @@ export default function ProfileScreen() {
       if (!profile || !initialLoad) {
         loadProfile();
       }
+      // Always refresh notifications when screen comes into focus
+      loadNotifications();
     }, [profile, initialLoad])
   );
 
   // Initial load when component mounts
   useEffect(() => {
     loadProfile();
+    loadNotifications();
   }, []);
+
+  // Update unread count when notifications change
+  useEffect(() => {
+    setUnreadCount(getUnreadCount());
+  }, [getUnreadCount]);
 
   // Load social data when profile loads, but don't block UI
   useEffect(() => {
@@ -202,6 +214,35 @@ export default function ProfileScreen() {
                 <Text style={styles.dashboardCardTitle}>Find Friends</Text>
                 <Text style={styles.dashboardCardSubtitle}>
                   Search for people to follow
+                </Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={Colors.secondary} />
+          </TouchableOpacity>
+
+          {/* Notifications */}
+          <TouchableOpacity
+            style={styles.dashboardCard}
+            onPress={() => router.push('/notifications')}
+          >
+            <View style={styles.dashboardCardLeft}>
+              <View style={styles.notificationIconContainer}>
+                <Bell size={24} color={Colors.accent} />
+                {unreadCount > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.dashboardCardInfo}>
+                <Text style={styles.dashboardCardTitle}>Notifications</Text>
+                <Text style={styles.dashboardCardSubtitle}>
+                  {unreadCount > 0
+                    ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
+                    : 'No new notifications'
+                  }
                 </Text>
               </View>
             </View>
@@ -404,5 +445,26 @@ const styles = StyleSheet.create({
   signOutCard: {
     borderColor: Colors.error + '20',
     borderWidth: 1,
+  },
+  notificationIconContainer: {
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: Colors.accent,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.background,
+  },
+  notificationBadgeText: {
+    color: Colors.background,
+    fontSize: FontSizes.caption,
+    fontWeight: FontWeights.bold,
   },
 });

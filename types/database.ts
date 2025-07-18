@@ -142,6 +142,76 @@ export interface Database {
           created_at?: string
         }
       }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          title: string
+          body: string
+          data: Json | null
+          is_read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          title: string
+          body: string
+          data?: Json | null
+          is_read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          title?: string
+          body?: string
+          data?: Json | null
+          is_read?: boolean
+          created_at?: string
+        }
+      }
+      notification_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          comments_enabled: boolean
+          likes_enabled: boolean
+          new_posts_enabled: boolean
+          follows_enabled: boolean
+          push_enabled: boolean
+          email_enabled: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          comments_enabled?: boolean
+          likes_enabled?: boolean
+          new_posts_enabled?: boolean
+          follows_enabled?: boolean
+          push_enabled?: boolean
+          email_enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          comments_enabled?: boolean
+          likes_enabled?: boolean
+          new_posts_enabled?: boolean
+          follows_enabled?: boolean
+          push_enabled?: boolean
+          email_enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       exercises: {
         Row: {
           id: string

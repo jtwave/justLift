@@ -16,7 +16,7 @@ interface RoutineStore {
   routines: WorkoutRoutineWithExercises[];
   loading: boolean;
   error: string | null;
-  
+
   // Actions
   loadRoutines: () => Promise<void>;
   createRoutine: (name: string, description: string | null, exerciseIds: string[]) => Promise<void>;
@@ -55,11 +55,11 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
       const formattedRoutines = routines?.map(routine => ({
         ...routine,
         exercises: routine.routine_exercises
-          .map(re => ({
+          .map((re: any) => ({
             ...re,
             exercise: re.exercise
           }))
-          .sort((a, b) => a.order_index - b.order_index)
+          .sort((a: any, b: any) => a.order_index - b.order_index)
       })) || [];
 
       set({ routines: formattedRoutines });
@@ -143,18 +143,45 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     try {
       set({ loading: true, error: null });
 
+      // First, remove any references to this routine in workouts
+      const { error: workoutError } = await supabase
+        .from('workouts')
+        .update({ routine_id: null })
+        .eq('routine_id', routineId);
+
+      if (workoutError) {
+        console.error('Error updating workouts:', workoutError);
+        // Continue anyway, as this might not be critical
+      }
+
+      // Delete routine exercises first (due to foreign key constraint)
+      const { error: routineExercisesError } = await supabase
+        .from('routine_exercises')
+        .delete()
+        .eq('routine_id', routineId);
+
+      if (routineExercisesError) {
+        console.error('Error deleting routine exercises:', routineExercisesError);
+        throw routineExercisesError;
+      }
+
+      // Now delete the routine itself
       const { error } = await supabase
         .from('workout_routines')
         .delete()
         .eq('id', routineId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting routine:', error);
+        throw error;
+      }
 
       // Update local state
       set({
         routines: get().routines.filter(routine => routine.id !== routineId)
       });
     } catch (error) {
+      console.error('Error in deleteRoutine:', error);
       set({ error: (error as Error).message });
     } finally {
       set({ loading: false });
@@ -209,7 +236,7 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
       set({ loading: true, error: null });
 
       // Update order indices for all exercises in the routine
-      const updates = exerciseIds.map((exerciseId, index) => 
+      const updates = exerciseIds.map((exerciseId, index) =>
         supabase
           .from('routine_exercises')
           .update({ order_index: index })

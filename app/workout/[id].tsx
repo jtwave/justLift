@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Alert, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -9,6 +9,7 @@ import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft, Clock, Target, Award, TrendingUp, Camera, MoveHorizontal as MoreHorizontal, Trash2 } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
 
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 60;
 
@@ -22,6 +23,10 @@ export default function WorkoutDetailScreen() {
   const [showOptions, setShowOptions] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
+  const { saveWorkoutAsRoutine } = useWorkoutStore();
+  const [showSaveRoutine, setShowSaveRoutine] = useState(false);
+  const [routineName, setRoutineName] = useState('');
+  const [routineDescription, setRoutineDescription] = useState('');
 
   useEffect(() => {
     if (workoutHistory.length === 0) {
@@ -118,7 +123,12 @@ export default function WorkoutDetailScreen() {
   };
 
   const handleDeleteWorkout = async () => {
-    if (!workout) return;
+    if (!workout) {
+      console.log('No workout to delete');
+      return;
+    }
+
+    console.log('Attempting to delete workout:', workout.id);
 
     Alert.alert(
       'Delete Entire Workout',
@@ -130,28 +140,53 @@ export default function WorkoutDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('User confirmed deletion, deleting workout post first...');
               // Delete the workout post first if it exists
               if (workoutPost) {
                 await deleteWorkoutPost(workoutPost.id);
+                console.log('Workout post deleted');
               }
 
+              console.log('Deleting workout from database...');
               // Then delete the workout itself
               const { error } = await supabase
                 .from('workouts')
                 .delete()
                 .eq('id', workout.id);
 
-              if (error) throw error;
+              if (error) {
+                console.error('Database error:', error);
+                throw error;
+              }
 
-              // Navigate back to workouts list
-              router.back();
+              console.log('Workout deleted successfully');
+
+              // Navigate back to the workouts list
+              router.replace('/profile/workouts');
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete workout. Please try again.');
+              console.error('Error deleting workout:', error);
+              Alert.alert('Error', `Failed to delete workout: ${(error as Error).message}`);
             }
           }
         }
       ]
     );
+  };
+
+  const handleSaveAsRoutine = async () => {
+    if (!routineName.trim()) {
+      Alert.alert('Error', 'Please enter a routine name');
+      return;
+    }
+    try {
+      await saveWorkoutAsRoutine(workout.id, routineName.trim(), routineDescription.trim() || undefined);
+      setShowSaveRoutine(false);
+      setRoutineName('');
+      setRoutineDescription('');
+      Alert.alert('Success', 'Workout saved as routine!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save routine');
+    }
   };
   return (
     <SafeAreaView style={styles.container}>
@@ -301,7 +336,63 @@ export default function WorkoutDetailScreen() {
             );
           })}
         </View>
+        <TouchableOpacity
+          style={{
+            backgroundColor: Colors.accent,
+            borderRadius: 8,
+            padding: 12,
+            margin: 16,
+            alignItems: 'center',
+          }}
+          onPress={() => setShowSaveRoutine(true)}
+        >
+          <Text style={{ color: Colors.primary, fontWeight: 'bold', fontSize: 16 }}>
+            Save as Routine
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
+      {/* Save as Routine Modal */}
+      <Modal visible={showSaveRoutine} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.container}>
+          <View style={{ padding: 24 }}>
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: Colors.primary, marginBottom: 16 }}>Save as Routine</Text>
+            <Text style={{ color: Colors.secondary, marginBottom: 8 }}>Routine Name *</Text>
+            <View style={{ backgroundColor: Colors.cardBackground, borderRadius: 8, marginBottom: 16 }}>
+              <TextInput
+                style={{ color: Colors.primary, fontSize: 18, padding: 12 }}
+                value={routineName}
+                onChangeText={setRoutineName}
+                placeholder="e.g., Push Day, Upper Body"
+                placeholderTextColor={Colors.secondary}
+              />
+            </View>
+            <Text style={{ color: Colors.secondary, marginBottom: 8 }}>Description (Optional)</Text>
+            <View style={{ backgroundColor: Colors.cardBackground, borderRadius: 8, marginBottom: 24 }}>
+              <TextInput
+                style={{ color: Colors.primary, fontSize: 16, padding: 12, minHeight: 60 }}
+                value={routineDescription}
+                onChangeText={setRoutineDescription}
+                placeholder="Brief description of this routine..."
+                placeholderTextColor={Colors.secondary}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 12 }}
+              onPress={handleSaveAsRoutine}
+            >
+              <Text style={{ color: Colors.primary, fontWeight: 'bold', fontSize: 16 }}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ alignItems: 'center', padding: 10 }}
+              onPress={() => setShowSaveRoutine(false)}
+            >
+              <Text style={{ color: Colors.secondary, fontSize: 16 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
       {/* Enlarged Image Modal */}
       <Modal visible={showImageModal} transparent animationType="fade" onRequestClose={() => setShowImageModal(false)}>
         <View style={styles.imageModalOverlay}>
@@ -344,6 +435,10 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  placeholder: {
+    width: 24,
   },
   optionsButton: {
     padding: 8,

@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/database';
+import { NotificationService } from '@/services/notificationService';
 
+type Exercise = Database['public']['Tables']['exercises']['Row'];
 type Profile = Database['public']['Tables']['profiles']['Row'];
+type Follow = Database['public']['Tables']['follows']['Row'] & {
+  following: Profile;
+};
+
 type WorkoutPost = Database['public']['Tables']['workout_posts']['Row'] & {
   user: Profile;
   workout: {
@@ -24,25 +30,20 @@ type WorkoutPost = Database['public']['Tables']['workout_posts']['Row'] & {
   }>;
 };
 
-type Follow = Database['public']['Tables']['follows']['Row'] & {
-  following: Profile;
-  follower: Profile;
-};
-
 interface SocialStore {
   // Feed
   feedPosts: WorkoutPost[];
   feedLoading: boolean;
-  
+
   // Following/Followers
   following: Follow[];
   followers: Follow[];
   followingLoading: boolean;
-  
+
   // User search
   searchResults: Profile[];
   searchLoading: boolean;
-  
+
   // Actions
   loadFeed: () => Promise<void>;
   loadFollowing: (userId: string) => Promise<void>;
@@ -189,7 +190,7 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
 
   loadFollowers: async (userId: string) => {
     try {
-      // Don't set loading state to avoid UI blocking
+      set({ followingLoading: true });
       const { data, error } = await supabase
         .from('follows')
         .select(`
@@ -203,46 +204,49 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
       set({ followers: data || [] });
     } catch (error) {
       console.error('Error loading followers:', error);
+    } finally {
+      set({ followingLoading: false });
     }
   },
 
   searchUsers: async (query: string) => {
     try {
       set({ searchLoading: true });
-      
-      console.log('Searching for:', query);
-      
-      if (!query.trim()) {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) return;
+
+      if (query.trim().length === 0) {
         set({ searchResults: [] });
         return;
       }
-      
-      // Get current user to filter them out
-      const { data: user } = await supabase.auth.getUser();
-      
-      // Search for users by username, full_name, or email (case insensitive)
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .or(`username.ilike.%${query.trim()}%,full_name.ilike.%${query.trim()}%,email.ilike.%${query.trim()}%`)
-        .limit(50);
+        .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+        .neq('id', user.user.id)
+        .limit(20);
 
-      console.log('Raw search results:', data?.length || 0, 'users found');
-      
       if (error) throw error;
-      
-      // Filter out current user
-      const filteredResults = (data || []).filter(profile => {
-        const isNotCurrentUser = profile.id !== (user.user?.id || '');
-        return isNotCurrentUser;
-      });
-      
-      console.log('Filtered results:', filteredResults.length, 'users (excluding current user)');
-      
-      set({ searchResults: filteredResults });
+
+      // Check if current user follows each result
+      const userIds = data?.map(p => p.id) || [];
+      const { data: followingData } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.user.id)
+        .in('following_id', userIds);
+
+      const followingIds = new Set(followingData?.map(f => f.following_id) || []);
+
+      const resultsWithFollowStatus = data?.map(profile => ({
+        ...profile,
+        is_following: followingIds.has(profile.id)
+      })) || [];
+
+      set({ searchResults: resultsWithFollowStatus });
     } catch (error) {
       console.error('Error searching users:', error);
-      set({ searchResults: [] });
     } finally {
       set({ searchLoading: false });
     }
@@ -261,24 +265,25 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
         });
 
       if (error) throw error;
-      
+
       // Update local state to reflect the follow
-      const currentUser = user.user.id;
       const state = get();
-      
+
       // Update search results if the followed user is in them
-      const updatedSearchResults = state.searchResults.map(profile => 
-        profile.id === userId 
+      const updatedSearchResults = state.searchResults.map(profile =>
+        profile.id === userId
           ? { ...profile, is_following: true }
           : profile
       );
-      
+
       set({ searchResults: updatedSearchResults });
-      
+
       // Reload following list if it's for current user
       if (state.following.length > 0) {
-        get().loadFollowing(currentUser);
+        get().loadFollowing(user.user.id);
       }
+
+      // Database trigger will handle notification automatically
     } catch (error) {
       console.error('Error following user:', error);
       throw error;
@@ -297,20 +302,20 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
         .eq('following_id', userId);
 
       if (error) throw error;
-      
+
       // Update local state to reflect the unfollow
       const currentUser = user.user.id;
       const state = get();
-      
+
       // Update search results if the unfollowed user is in them
-      const updatedSearchResults = state.searchResults.map(profile => 
-        profile.id === userId 
+      const updatedSearchResults = state.searchResults.map(profile =>
+        profile.id === userId
           ? { ...profile, is_following: false }
           : profile
       );
-      
+
       set({ searchResults: updatedSearchResults });
-      
+
       // Reload following list if it's for current user
       if (state.following.length > 0) {
         get().loadFollowing(currentUser);
@@ -343,6 +348,8 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
             : post
         )
       });
+
+      // Database trigger will handle notification automatically
     } catch (error) {
       console.error('Error liking post:', error);
     }
@@ -391,6 +398,8 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
 
       // Reload feed to get updated comments
       get().loadFeed();
+
+      // Database trigger will handle notification automatically
     } catch (error) {
       console.error('Error adding comment:', error);
     }
@@ -420,16 +429,20 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) return;
 
-      const { error } = await supabase
+      const { data: post, error } = await supabase
         .from('workout_posts')
         .insert({
           workout_id: workoutId,
           user_id: user.user.id,
           caption: caption?.trim() || null,
           is_public: isPublic
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Database trigger will handle notifications automatically
     } catch (error) {
       console.error('Error creating workout post:', error);
       throw error;
@@ -441,7 +454,7 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) return;
 
-      const { error } = await supabase
+      const { data: post, error } = await supabase
         .from('workout_posts')
         .insert({
           workout_id: workoutId,
@@ -450,9 +463,13 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
           media_url: mediaUrl || null,
           media_type: mediaType || null,
           is_public: isPublic
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Database trigger will handle notifications automatically
     } catch (error) {
       console.error('Error creating workout post with media:', error);
       throw error;
@@ -480,46 +497,49 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
     }
   },
 
-  loadWorkoutPost: async (workoutId: string) => {
-    try {
-      const { data: post, error } = await supabase
-        .from('workout_posts')
-        .select(`
-          *,
-          user:profiles(*)
-        `)
-        .eq('workout_id', workoutId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      return post;
-    } catch (error) {
-      console.error('Error loading workout post:', error);
-      return null;
-    }
-  },
-
-  updateProfile: async (updates) => {
+  updateProfile: async (updates: { username?: string; full_name?: string; bio?: string; avatar_url?: string }) => {
     try {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) return;
 
       const { error } = await supabase
         .from('profiles')
-        .update({
-          ...updates,
-          username: updates.username?.toLowerCase(),
-          updated_at: new Date().toISOString()
-        })
+        .update(updates)
         .eq('id', user.user.id);
 
       if (error) throw error;
     } catch (error) {
       console.error('Error updating profile:', error);
       throw error;
+    }
+  },
+
+  loadWorkoutPost: async (workoutId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('workout_posts')
+        .select(`
+          *,
+          user:profiles(*),
+          workout:workouts(
+            id,
+            name,
+            start_time,
+            end_time,
+            workout_exercises(
+              exercise:exercises(name, category),
+              workout_sets(weight, reps, completed)
+            )
+          )
+        `)
+        .eq('workout_id', workoutId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error loading workout post:', error);
+      return null;
     }
   },
 
@@ -531,11 +551,6 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
         .eq('id', postId);
 
       if (error) throw error;
-
-      // Update local state to remove the deleted post
-      set({
-        feedPosts: get().feedPosts.filter(post => post.id !== postId)
-      });
     } catch (error) {
       console.error('Error deleting workout post:', error);
       throw error;
