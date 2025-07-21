@@ -55,8 +55,8 @@ export default function RootLayout() {
     const initializeNotifications = async () => {
       try {
         // Request permissions
-        const { status } = await Notifications.requestPermissionsAsync();
-        if (status !== 'granted') {
+        const granted = await NotificationService.requestPermissions();
+        if (!granted) {
           console.log('Notification permissions not granted');
         }
 
@@ -104,6 +104,8 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="+not-found" />
+          <Stack.Screen name="workout/routines/exercise-config" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="workout/routines/save-routine-modal" options={{ presentation: 'modal' }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

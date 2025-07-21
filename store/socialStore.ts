@@ -107,6 +107,7 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
             start_time,
             end_time,
             workout_exercises(
+              exercise_id,
               exercise:exercises(name, category),
               workout_sets(weight, reps, completed)
             )
@@ -153,6 +154,7 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
         workout: {
           ...post.workout,
           exercises: post.workout.workout_exercises.map((we: any) => ({
+            exercise_id: we.exercise_id,
             exercise: we.exercise,
             sets: we.workout_sets
           }))

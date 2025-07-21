@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWorkoutStore } from '@/store/workoutStore';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { router } from 'expo-router';
-import { Heart, MessageCircle, User, Clock, Dumbbell, Search, Play, Volume2, VolumeX, MoveHorizontal as MoreHorizontal, Trash2 } from 'lucide-react-native';
+import { Heart, MessageCircle, User, Clock, Dumbbell, Search, Play, Volume2, VolumeX, MoveHorizontal as MoreHorizontal, Trash2, Plus, Minus, X, GripVertical } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 60;
@@ -29,10 +29,57 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const { saveWorkoutAsRoutine } = useWorkoutStore();
+  const { exercises } = useWorkoutStore();
   const [showSaveRoutine, setShowSaveRoutine] = useState(false);
   const [routineName, setRoutineName] = useState('');
   const [routineDescription, setRoutineDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [routineExerciseSets, setRoutineExerciseSets] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (showSaveRoutine && post?.workout?.exercises) {
+      console.log('--- Save as Routine: post.workout.exercises ---', post.workout.exercises);
+      console.log('--- Save as Routine: global exercises ---', exercises);
+      post.workout.exercises.forEach((exercise: any, idx: number) => {
+        console.log(`RAW exercise object at index ${idx}:`, exercise);
+      });
+      setRoutineExerciseSets(
+        post.workout.exercises.map((exercise: any, idx: number) => {
+          // Use exercise.exercise_id (from mapping), fallback to exercise.exercise.id
+          const realExerciseId = exercise.exercise_id || (exercise.exercise && exercise.exercise.id);
+          const realExercise = exercises.find((ex: any) => ex.id === realExerciseId);
+          if (!realExercise) {
+            console.warn(`No matching global exercise for exercise_id=${realExerciseId} at index ${idx}`, exercise);
+          } else {
+            console.log(`Matched exercise_id=${realExerciseId} to global exercise:`, realExercise);
+          }
+          return {
+            exerciseId: realExercise?.id || realExerciseId,
+            name: realExercise?.name || exercise.exercise?.name || exercise.name,
+            category: realExercise?.category || exercise.exercise?.category || exercise.category,
+            ...realExercise,
+            sets: exercise.sets.map((set: any, setIdx: number) => ({
+              weight: set.weight,
+              reps: set.reps
+            }))
+          };
+        })
+      );
+    }
+  }, [showSaveRoutine, post?.workout?.exercises, exercises]);
+
+  const handleSetChange = (exerciseIdx: number, setIdx: number, field: 'weight' | 'reps', value: string) => {
+    setRoutineExerciseSets(prev => prev.map((ex, i) =>
+      i === exerciseIdx
+        ? {
+          ...ex,
+          sets: ex.sets.map((set: any, j: number) =>
+            j === setIdx ? { ...set, [field]: value.replace(/[^0-9.]/g, '') } : set
+          )
+        }
+        : ex
+    ));
+  };
 
   const formatWorkoutDuration = (startTime: string, endTime: string | null) => {
     if (!endTime) return 'In progress';
@@ -70,7 +117,18 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
     }
     setSaving(true);
     try {
-      await saveWorkoutAsRoutine(post.workout.id, routineName.trim(), routineDescription.trim() || undefined);
+      await saveWorkoutAsRoutine(
+        post.workout.id,
+        routineName.trim(),
+        routineDescription.trim() || undefined,
+        routineExerciseSets.map(ex => ({
+          exercise_id: ex.exerciseId,
+          sets: ex.sets.map((set: any) => ({
+            weight: Number(set.weight) || 0,
+            reps: Number(set.reps) || 0
+          }))
+        }))
+      );
       setShowSaveRoutine(false);
       setRoutineName('');
       setRoutineDescription('');
@@ -103,6 +161,7 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
   });
 
   const renderSwipeableItem = ({ item, index }: { item: PostMediaItem; index: number }) => {
+    if (!item) return null;
     if (item.type === 'media') {
       return (
         <View style={styles.mediaContainer}>
@@ -211,60 +270,26 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
                 marginTop: 16,
                 alignItems: 'center',
               }}
-              onPress={() => setShowSaveRoutine(true)}
+              onPress={() => {
+                router.push({
+                  pathname: '/workout/routines/save-routine-modal',
+                  params: {
+                    workoutId: post.workout.id,
+                    workoutExercises: JSON.stringify(post.workout.exercises)
+                  }
+                });
+              }}
             >
               <Text style={{ color: Colors.primary, fontWeight: 'bold', fontSize: 16 }}>
                 Save as Routine
               </Text>
             </TouchableOpacity>
           </ScrollView>
-          {/* Save as Routine Modal */}
-          <Modal visible={showSaveRoutine} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowSaveRoutine(false)}>
-            <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
-              <View style={{ padding: 24 }}>
-                <Text style={{ fontSize: 22, fontWeight: 'bold', color: Colors.primary, marginBottom: 16 }}>Save as Routine</Text>
-                <Text style={{ color: Colors.secondary, marginBottom: 8 }}>Routine Name *</Text>
-                <View style={{ backgroundColor: Colors.cardBackground, borderRadius: 8, marginBottom: 16 }}>
-                  <TextInput
-                    style={{ color: Colors.primary, fontSize: 18, padding: 12 }}
-                    value={routineName}
-                    onChangeText={setRoutineName}
-                    placeholder="e.g., Push Day, Upper Body"
-                    placeholderTextColor={Colors.secondary}
-                  />
-                </View>
-                <Text style={{ color: Colors.secondary, marginBottom: 8 }}>Description (Optional)</Text>
-                <View style={{ backgroundColor: Colors.cardBackground, borderRadius: 8, marginBottom: 24 }}>
-                  <TextInput
-                    style={{ color: Colors.primary, fontSize: 16, padding: 12, minHeight: 60 }}
-                    value={routineDescription}
-                    onChangeText={setRoutineDescription}
-                    placeholder="Brief description of this routine..."
-                    placeholderTextColor={Colors.secondary}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 12, opacity: saving ? 0.7 : 1 }}
-                  onPress={handleSaveAsRoutine}
-                  disabled={saving}
-                >
-                  <Text style={{ color: Colors.primary, fontWeight: 'bold', fontSize: 16 }}>{saving ? 'Saving...' : 'Save'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ alignItems: 'center', padding: 10 }}
-                  onPress={() => setShowSaveRoutine(false)}
-                  disabled={saving}
-                >
-                  <Text style={{ color: Colors.secondary, fontSize: 16 }}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </SafeAreaView>
-          </Modal>
         </View>
       );
     }
+    // fallback for unknown type
+    return null;
   };
 
   return (
@@ -332,7 +357,11 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
         <FlatList
           data={swipeableItems}
           renderItem={renderSwipeableItem}
-          keyExtractor={(item, index) => `${post.id}-${index}`}
+          keyExtractor={(item, index) => {
+            if (item.type === 'media' && item.data?.url) return `media-${item.data.url}`;
+            if (item.type === 'workout' && item.data?.id) return `workout-${item.data.id}`;
+            return `${post.id}-${index}`;
+          }}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
@@ -847,5 +876,123 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.caption,
     color: Colors.secondary,
     marginTop: 4,
+  },
+  // New styles for Save as Routine Modal
+  saveRoutineModalContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    paddingTop: 0,
+  },
+  saveRoutineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    backgroundColor: Colors.background,
+    zIndex: 10,
+  },
+  saveRoutineHeaderTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    flex: 1,
+    textAlign: 'center',
+  },
+  saveRoutineHeaderButton: {
+    padding: 8,
+  },
+  saveRoutineContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+  },
+  saveRoutineSection: {
+    marginBottom: 28,
+  },
+  saveRoutineSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    marginBottom: 12,
+  },
+  saveRoutineInputContainer: {
+    marginBottom: 18,
+  },
+  saveRoutineInputLabel: {
+    fontSize: 14,
+    color: Colors.secondary,
+    marginBottom: 6,
+  },
+  saveRoutineInput: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 16,
+    color: Colors.primary,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    width: '100%',
+  },
+  saveRoutineTextArea: {
+    minHeight: 80,
+    paddingTop: 14,
+    textAlignVertical: 'top',
+  },
+  saveRoutineExerciseCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 14,
+    marginBottom: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  saveRoutineExerciseInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  saveRoutineExerciseName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    marginBottom: 2,
+  },
+  saveRoutineExerciseCategory: {
+    fontSize: 13,
+    color: Colors.secondary,
+    marginBottom: 2,
+  },
+  saveRoutineExerciseConfigSummary: {
+    fontSize: 13,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  saveRoutineRemoveButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  saveRoutineEmptyExercises: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  saveRoutineEmptyExercisesText: {
+    fontSize: 15,
+    color: Colors.secondary,
+    marginBottom: 6,
+  },
+  saveRoutineEmptyExercisesSubtext: {
+    fontSize: 13,
+    color: Colors.secondary,
   },
 });

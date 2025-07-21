@@ -41,11 +41,17 @@ interface WorkoutStore {
   setActiveExercise: (workoutExerciseId: string) => Promise<void>;
   getPreviousSetData: (exerciseId: string, setNumber: number) => PreviousSetData | null;
   updateRestTime: (workoutExerciseId: string, restTime: number) => Promise<void>;
-  saveWorkoutAsRoutine: (workoutId: string, routineName: string, description?: string) => Promise<void>;
+  saveWorkoutAsRoutine: (
+    workoutId: string,
+    routineName: string,
+    description?: string,
+    exerciseConfigs?: { exercise_id: string, sets: { weight: number, reps: number }[] }[]
+  ) => Promise<void>;
   updateWorkoutDetails: (workoutId: string, name: string, description?: string) => Promise<void>;
   discardWorkout: (workoutId: string) => Promise<void>;
   deleteWorkoutSet: (setId: string) => Promise<void>;
   updateExerciseNotes: (exerciseId: string, notes: string) => Promise<void>;
+  updateWorkoutSets: (workoutExerciseId: string, sets: { id: string, weight: number, reps: number }[]) => Promise<void>;
 }
 
 // Calculate estimated 1RM using Epley formula
@@ -212,10 +218,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       if (routineId) {
         const { data: routineExercises, error: routineError } = await supabase
           .from('routine_exercises')
-          .select(`
-            *,
-            exercise:exercises (*)
-          `)
+          .select(`*, exercise:exercises (*)`)
           .eq('routine_id', routineId)
           .order('order_index', { ascending: true });
 
@@ -234,25 +237,38 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
           const { data: addedExercises, error: addError } = await supabase
             .from('workout_exercises')
             .insert(workoutExercises)
-            .select(`
-              *,
-              exercise:exercises (*),
-              workout_sets (*)
-            `);
+            .select(`*, exercise:exercises (*), workout_sets (*)`);
 
           if (addError) throw addError;
 
-          const formattedExercises = addedExercises.map(we => ({
-            ...we,
-            sets: []
-          }));
-
-          set({
-            currentWorkout: {
-              ...newWorkout,
-              exercises: formattedExercises
+          // Prefill sets for each exercise using default_sets
+          for (let i = 0; i < addedExercises.length; i++) {
+            const we: any = addedExercises[i];
+            const routineEx = routineExercises.find((re: any) => re.exercise_id === we.exercise_id);
+            if (routineEx && routineEx.default_sets) {
+              let sets;
+              try {
+                sets = typeof routineEx.default_sets === 'string' ? JSON.parse(routineEx.default_sets) : routineEx.default_sets;
+              } catch (e) {
+                sets = [];
+              }
+              if (Array.isArray(sets) && sets.length > 0) {
+                const workoutSets = sets.map((set: any, idx: number) => ({
+                  workout_exercise_id: we.id,
+                  set_number: idx + 1,
+                  weight: set.weight ?? 0,
+                  reps: set.reps ?? 0,
+                  completed: false,
+                  is_pr: false,
+                  timestamp: new Date().toISOString(),
+                }));
+                await supabase.from('workout_sets').insert(workoutSets);
+              }
             }
-          });
+          }
+
+          // Reload the workout with sets
+          await get().loadCurrentWorkout();
         }
       }
     } catch (error) {
@@ -568,20 +584,26 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }
   },
 
-  saveWorkoutAsRoutine: async (workoutId: string, routineName: string, description?: string) => {
+  saveWorkoutAsRoutine: async (
+    workoutId: string,
+    routineName: string,
+    description?: string,
+    exerciseConfigs?: { exercise_id: string, sets: { weight: number, reps: number }[] }[]
+  ) => {
     try {
       set({ loading: true, error: null });
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('User not authenticated');
 
-      // Get the workout with exercises
+      // Get the workout with exercises and sets
       const { data: workout, error: workoutError } = await supabase
         .from('workouts')
         .select(`
           *,
           workout_exercises (
             *,
-            exercise:exercises (*)
+            exercise:exercises (*),
+            workout_sets (*)
           )
         `)
         .eq('id', workoutId)
@@ -602,19 +624,39 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
       if (routineError) throw routineError;
 
-      // Add exercises to the routine
-      if (workout.workout_exercises.length > 0) {
-        const routineExercises = workout.workout_exercises.map(we => ({
+      // Add exercises to the routine, including default_sets
+      let routineExercises;
+      if (exerciseConfigs && exerciseConfigs.length > 0) {
+        routineExercises = exerciseConfigs.map((ex, idx) => ({
           routine_id: routine.id,
-          exercise_id: we.exercise_id,
-          order_index: we.order_index,
-          default_rest_time: we.rest_time,
+          exercise_id: ex.exercise_id,
+          order_index: idx,
+          default_rest_time: 90, // You can enhance this to allow editing rest time
+          default_sets: ex.sets.length > 0 ? JSON.stringify(ex.sets) : null,
         }));
+      } else if (workout.workout_exercises.length > 0) {
+        routineExercises = workout.workout_exercises.map((we: any) => {
+          // Save sets as default_sets (only weight/reps/duration/distance)
+          const sets = (we.workout_sets || []).map((set: any) => ({
+            weight: set.weight,
+            reps: set.reps,
+            duration: set.duration,
+            distance: set.distance
+          }));
+          return {
+            routine_id: routine.id,
+            exercise_id: we.exercise_id,
+            order_index: we.order_index,
+            default_rest_time: we.rest_time,
+            default_sets: sets.length > 0 ? JSON.stringify(sets) : null,
+          };
+        });
+      }
 
+      if (routineExercises && routineExercises.length > 0) {
         const { error: exercisesError } = await supabase
           .from('routine_exercises')
           .insert(routineExercises);
-
         if (exercisesError) throw exercisesError;
       }
     } catch (error) {
@@ -753,6 +795,25 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         exercises: updatedExercises,
         currentWorkout: updatedCurrentWorkout
       });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  updateWorkoutSets: async (workoutExerciseId: string, sets: { id: string, weight: number, reps: number }[]) => {
+    try {
+      set({ loading: true, error: null });
+      // Update each set in parallel
+      const updates = sets.map(setObj =>
+        supabase.from('workout_sets')
+          .update({ weight: setObj.weight, reps: setObj.reps })
+          .eq('id', setObj.id)
+      );
+      await Promise.all(updates);
+      // Reload current workout
+      await get().loadCurrentWorkout();
     } catch (error) {
       set({ error: (error as Error).message });
     } finally {

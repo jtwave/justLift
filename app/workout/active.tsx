@@ -29,7 +29,8 @@ export default function ActiveWorkoutScreen() {
     updateRestTime,
     removeExercise,
     loading,
-    addWorkoutSet
+    addWorkoutSet,
+    updateWorkoutSets
   } = useWorkoutStore();
 
   const { elapsedTime, formatTime, startTimer, resetTimer } = useWorkoutTimer();
@@ -143,6 +144,10 @@ export default function ActiveWorkoutScreen() {
     await loadCurrentWorkout();
     console.log('Current workout reloaded');
     console.log('=== HANDLE ADD SET END ===');
+  };
+
+  const handleUpdateSets = async (workoutExerciseId: string, sets: any[]) => {
+    await updateWorkoutSets(workoutExerciseId, sets);
   };
 
   const handleFinishWorkout = () => {
@@ -400,6 +405,7 @@ export default function ActiveWorkoutScreen() {
             onRestTimerSettings={() => handleRestTimerSettings(exercise.id)}
             onDeleteExercise={() => handleDeleteExercise(exercise.id)}
             onDeleteSet={(setId) => handleDeleteSet(setId)}
+            onUpdateSets={(sets) => handleUpdateSets(exercise.id, sets)}
           />
         ))}
         <TouchableOpacity

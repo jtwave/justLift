@@ -55,11 +55,11 @@ export function useAuth() {
       });
       return { data, error };
     } else {
-      // Look up email by username first
+      // Look up email by username first (case-insensitive)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('email')
-        .eq('username', emailOrUsername.toLowerCase())
+        .ilike('username', emailOrUsername)
         .single();
 
       if (profileError || !profile) {

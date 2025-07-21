@@ -8,7 +8,7 @@ import { useProgressStore } from '@/store/progressStore';
 import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, Clock, Target, Award, TrendingUp, Camera, MoveHorizontal as MoreHorizontal, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Clock, Target, Award, TrendingUp, Camera, MoveHorizontal as MoreHorizontal, Trash2, Plus, Minus } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 60;
@@ -27,6 +27,7 @@ export default function WorkoutDetailScreen() {
   const [showSaveRoutine, setShowSaveRoutine] = useState(false);
   const [routineName, setRoutineName] = useState('');
   const [routineDescription, setRoutineDescription] = useState('');
+  const [routineExerciseSets, setRoutineExerciseSets] = useState<any[]>([]);
 
   useEffect(() => {
     if (workoutHistory.length === 0) {
@@ -46,6 +47,21 @@ export default function WorkoutDetailScreen() {
     }
   }, [id, workoutHistory]);
 
+  useEffect(() => {
+    if (showSaveRoutine && workout?.exercises) {
+      setRoutineExerciseSets(
+        workout.exercises.map((exercise: any) => ({
+          exerciseId: exercise.exercise_id,
+          name: exercise.exercise.name,
+          sets: exercise.sets.map((set: any) => ({
+            weight: set.weight,
+            reps: set.reps
+          }))
+        }))
+      );
+    }
+  }, [showSaveRoutine, workout?.exercises]);
+
   const loadWorkoutPostForWorkout = async (workoutId: string) => {
     try {
       const post = await loadWorkoutPost(workoutId);
@@ -53,6 +69,19 @@ export default function WorkoutDetailScreen() {
     } catch (error) {
       console.error('Error loading workout post:', error);
     }
+  };
+
+  const handleSetChange = (exerciseIdx: number, setIdx: number, field: 'weight' | 'reps', value: string) => {
+    setRoutineExerciseSets(prev => prev.map((ex, i) =>
+      i === exerciseIdx
+        ? {
+          ...ex,
+          sets: ex.sets.map((set: any, j: number) =>
+            j === setIdx ? { ...set, [field]: value.replace(/[^0-9.]/g, '') } : set
+          )
+        }
+        : ex
+    ));
   };
 
   if (!workout) {
@@ -179,7 +208,18 @@ export default function WorkoutDetailScreen() {
       return;
     }
     try {
-      await saveWorkoutAsRoutine(workout.id, routineName.trim(), routineDescription.trim() || undefined);
+      await saveWorkoutAsRoutine(
+        workout.id,
+        routineName.trim(),
+        routineDescription.trim() || undefined,
+        routineExerciseSets.map(ex => ({
+          exercise_id: ex.exerciseId,
+          sets: ex.sets.map((set: any) => ({
+            weight: Number(set.weight) || 0,
+            reps: Number(set.reps) || 0
+          }))
+        }))
+      );
       setShowSaveRoutine(false);
       setRoutineName('');
       setRoutineDescription('');
@@ -354,7 +394,7 @@ export default function WorkoutDetailScreen() {
       {/* Save as Routine Modal */}
       <Modal visible={showSaveRoutine} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.container}>
-          <View style={{ padding: 24 }}>
+          <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
             <Text style={{ fontSize: 22, fontWeight: 'bold', color: Colors.primary, marginBottom: 16 }}>Save as Routine</Text>
             <Text style={{ color: Colors.secondary, marginBottom: 8 }}>Routine Name *</Text>
             <View style={{ backgroundColor: Colors.cardBackground, borderRadius: 8, marginBottom: 16 }}>
@@ -378,6 +418,62 @@ export default function WorkoutDetailScreen() {
                 numberOfLines={3}
               />
             </View>
+            {/* Editable sets/weights UI */}
+            <View style={{ marginVertical: 16 }}>
+              <Text style={{ fontWeight: 'bold', color: Colors.primary, marginBottom: 8 }}>Exercises & Sets:</Text>
+              {routineExerciseSets.map((exercise, exerciseIdx) => (
+                <View key={exercise.exerciseId} style={{ marginBottom: 16, backgroundColor: Colors.cardBackground, borderRadius: 8, padding: 12 }}>
+                  <Text style={{ color: Colors.primary, fontWeight: 'bold', marginBottom: 4 }}>{exercise.name}</Text>
+                  {exercise.sets.map((set: any, setIdx: number) => (
+                    <View key={setIdx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <Text style={{ color: Colors.secondary, width: 50 }}>Set {setIdx + 1}:</Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 4 }}
+                        onPress={() => handleSetChange(exerciseIdx, setIdx, 'weight', String(Math.max(0, Number(set.weight) - 5)))}
+                      >
+                        <Minus size={18} color={Colors.primary} />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={{ width: 60, paddingVertical: 4, textAlign: 'center', backgroundColor: Colors.background, color: Colors.primary, borderRadius: 8, fontSize: 16 }}
+                        value={String(set.weight)}
+                        onChangeText={val => handleSetChange(exerciseIdx, setIdx, 'weight', val)}
+                        placeholder="Weight"
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.secondary}
+                      />
+                      <TouchableOpacity
+                        style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 4 }}
+                        onPress={() => handleSetChange(exerciseIdx, setIdx, 'weight', String(Number(set.weight) + 5))}
+                      >
+                        <Plus size={18} color={Colors.primary} />
+                      </TouchableOpacity>
+                      <Text style={{ color: Colors.secondary, marginHorizontal: 4 }}>lbs ×</Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 4 }}
+                        onPress={() => handleSetChange(exerciseIdx, setIdx, 'reps', String(Math.max(0, Number(set.reps) - 1)))}
+                      >
+                        <Minus size={18} color={Colors.primary} />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={{ width: 40, paddingVertical: 4, textAlign: 'center', backgroundColor: Colors.background, color: Colors.primary, borderRadius: 8, fontSize: 16 }}
+                        value={String(set.reps)}
+                        onChangeText={val => handleSetChange(exerciseIdx, setIdx, 'reps', val)}
+                        placeholder="Reps"
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.secondary}
+                      />
+                      <TouchableOpacity
+                        style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 4 }}
+                        onPress={() => handleSetChange(exerciseIdx, setIdx, 'reps', String(Number(set.reps) + 1))}
+                      >
+                        <Plus size={18} color={Colors.primary} />
+                      </TouchableOpacity>
+                      <Text style={{ color: Colors.secondary, marginLeft: 4 }}>reps</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
             <TouchableOpacity
               style={{ backgroundColor: Colors.accent, borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 12 }}
               onPress={handleSaveAsRoutine}
@@ -390,7 +486,7 @@ export default function WorkoutDetailScreen() {
             >
               <Text style={{ color: Colors.secondary, fontSize: 16 }}>Cancel</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
       {/* Enlarged Image Modal */}

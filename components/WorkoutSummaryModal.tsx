@@ -49,6 +49,23 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
   const [showSaveRoutine, setShowSaveRoutine] = useState(false);
   const [routineName, setRoutineName] = useState('');
   const [routineDescription, setRoutineDescription] = useState('');
+  const [routineExerciseSets, setRoutineExerciseSets] = useState<any[]>([]);
+
+  // When opening the Save as Routine modal, initialize sets for editing
+  React.useEffect(() => {
+    if (showSaveRoutine && workout?.exercises) {
+      setRoutineExerciseSets(
+        workout.exercises.map((exercise: any) => ({
+          exerciseId: exercise.exercise_id,
+          name: exercise.exercise.name,
+          sets: exercise.sets.map((set: any) => ({
+            weight: set.weight,
+            reps: set.reps
+          }))
+        }))
+      );
+    }
+  }, [showSaveRoutine, workout?.exercises]);
 
   // Save workout form state
   const [workoutTitle, setWorkoutTitle] = useState('');
@@ -89,18 +106,42 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
   const prCount = workout.exercises.reduce((total: number, exercise: any) =>
     total + exercise.sets.filter((set: any) => set.is_pr).length, 0);
 
+  const handleSetChange = (exerciseIdx: number, setIdx: number, field: 'weight' | 'reps', value: string) => {
+    setRoutineExerciseSets(prev => prev.map((ex, i) =>
+      i === exerciseIdx
+        ? {
+          ...ex,
+          sets: ex.sets.map((set: any, j: number) =>
+            j === setIdx ? { ...set, [field]: value.replace(/[^0-9.]/g, '') } : set
+          )
+        }
+        : ex
+    ));
+  };
+
   const handleSaveAsRoutine = async () => {
     if (!routineName.trim()) {
       Alert.alert('Error', 'Please enter a routine name');
       return;
     }
-
     try {
-      await saveWorkoutAsRoutine(workout.id, routineName.trim(), routineDescription.trim() || undefined);
+      // Pass sets/weights for each exercise to the routine creation logic
+      await saveWorkoutAsRoutine(
+        workout.id,
+        routineName.trim(),
+        routineDescription.trim() || undefined,
+        routineExerciseSets.map(ex => ({
+          exercise_id: ex.exerciseId,
+          sets: ex.sets.map((set: any) => ({
+            weight: Number(set.weight) || 0,
+            reps: Number(set.reps) || 0
+          }))
+        }))
+      );
       setShowSaveRoutine(false);
       setRoutineName('');
       setRoutineDescription('');
-      Alert.alert('Success', 'Workout saved as routine!');
+      Alert.alert('Success', 'Routine saved with sets/weights!');
     } catch (error) {
       Alert.alert('Error', 'Failed to save routine');
     }
@@ -152,6 +193,18 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
     Alert.alert('Not Available', 'Video recording is temporarily disabled. Please use photos instead.');
   };
 
+  // Utility to ensure we always have a local file URI for uploads
+  async function getLocalUri(assetUri: string): Promise<string> {
+    if (assetUri.startsWith('file://')) {
+      return assetUri;
+    }
+    // For iOS ph:// URIs, copy to cache
+    const fileName = assetUri.split('/').pop() || `photo_${Date.now()}.jpg`;
+    const localUri = `${FileSystem.cacheDirectory}${fileName}`;
+    await FileSystem.copyAsync({ from: assetUri, to: localUri });
+    return localUri;
+  }
+
   const handleSelectFromLibrary = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -168,7 +221,8 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
       });
 
       if (!result.canceled && result.assets[0]) {
-        setSelectedMedia(result.assets[0].uri);
+        const localUri = await getLocalUri(result.assets[0].uri);
+        setSelectedMedia(localUri);
         setMediaType('photo');
       }
     } catch (error) {
@@ -455,11 +509,34 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
             </View>
 
             <View style={styles.exercisePreview}>
-              <Text style={styles.previewTitle}>Exercises to include:</Text>
-              {workout.exercises.map((exercise: any, index: number) => (
-                <Text key={exercise.id} style={styles.previewExercise}>
-                  {index + 1}. {exercise.exercise.name}
-                </Text>
+              <Text style={styles.previewTitle}>Exercises & Sets:</Text>
+              {routineExerciseSets.map((exercise, exerciseIdx) => (
+                <View key={exercise.exerciseId} style={{ marginBottom: 16 }}>
+                  <Text style={styles.previewExercise}>{exercise.name}</Text>
+                  {exercise.sets.map((set: any, setIdx: number) => (
+                    <View key={setIdx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <Text style={{ color: Colors.secondary }}>Set {setIdx + 1}:</Text>
+                      <TextInput
+                        style={[styles.input, { width: 60, paddingVertical: 4, textAlign: 'center' }]}
+                        value={String(set.weight)}
+                        onChangeText={val => handleSetChange(exerciseIdx, setIdx, 'weight', val)}
+                        placeholder="Weight"
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.secondary}
+                      />
+                      <Text style={{ color: Colors.secondary }}>lbs ×</Text>
+                      <TextInput
+                        style={[styles.input, { width: 40, paddingVertical: 4, textAlign: 'center' }]}
+                        value={String(set.reps)}
+                        onChangeText={val => handleSetChange(exerciseIdx, setIdx, 'reps', val)}
+                        placeholder="Reps"
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.secondary}
+                      />
+                      <Text style={{ color: Colors.secondary }}>reps</Text>
+                    </View>
+                  ))}
+                </View>
               ))}
             </View>
           </ScrollView>

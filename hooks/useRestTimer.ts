@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import { AppState } from 'react-native';
 
 // Configure notifications for background timer
 Notifications.setNotificationHandler({
@@ -19,9 +20,15 @@ export function useRestTimer() {
   const [isActive, setIsActive] = useState(false);
   const [timerStartTime, setTimerStartTime] = useState<number | null>(null);
 
-  // Load timer state from storage on mount
+  // Load timer state from storage on mount and when app resumes
   useEffect(() => {
     loadTimerState();
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        loadTimerState();
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
   // Save timer state to storage whenever it changes
@@ -104,15 +111,16 @@ export function useRestTimer() {
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
 
-  const scheduleTimerNotification = async () => {
+  const scheduleTimerNotification = async (seconds?: number) => {
     try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Rest Timer Complete!',
           body: 'Your rest period is over. Time to get back to your workout!',
           sound: true,
         },
-        trigger: null, // Send immediately
+        trigger: { seconds: seconds ?? timeLeft },
       });
     } catch (error) {
       console.error('Error scheduling notification:', error);
@@ -126,18 +134,21 @@ export function useRestTimer() {
     setIsActive(true);
     setTimerStartTime(startTime);
     setDuration(time);
+    scheduleTimerNotification(time);
   }, [duration]);
 
-  const pauseTimer = useCallback(() => {
+  const pauseTimer = useCallback(async () => {
     setIsActive(false);
     setTimerStartTime(null);
+    await Notifications.cancelAllScheduledNotificationsAsync();
   }, []);
 
-  const resetTimer = useCallback(() => {
+  const resetTimer = useCallback(async () => {
     setTimeLeft(0);
     setIsActive(false);
     setTimerStartTime(null);
-    clearTimerState();
+    await clearTimerState();
+    await Notifications.cancelAllScheduledNotificationsAsync();
   }, []);
 
   const adjustDuration = useCallback((newDuration: number) => {

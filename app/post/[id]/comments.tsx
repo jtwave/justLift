@@ -66,6 +66,7 @@ export default function CommentsScreen() {
         workout: {
           ...postData.workout,
           exercises: postData.workout.workout_exercises.map((we: any) => ({
+            exercise_id: we.exercise_id, // <-- add this line
             exercise: we.exercise,
             sets: we.workout_sets
           }))

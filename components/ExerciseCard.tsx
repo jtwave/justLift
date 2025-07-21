@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useWorkoutStore } from '@/store/workoutStore';
-import { Minus, Plus, Timer, Settings, Info, Play, Pause, RotateCcw, Trash2, X, CheckCircle } from 'lucide-react-native';
+import { Minus, Plus, Timer, Settings, Info, Play, Pause, RotateCcw, Trash2, X, CheckCircle, Edit3 } from 'lucide-react-native';
 import { ExerciseInfoModal } from './ExerciseInfoModal';
 import { useRestTimer } from '@/hooks/useRestTimer';
 
@@ -17,11 +17,16 @@ interface ExerciseCardProps {
   onDeleteSet?: (setId: string) => void;
   isOpen?: boolean;
   onToggle?: () => void;
+  onUpdateSets?: (sets: any[]) => void;
 }
 
-export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings, onDeleteExercise, onDeleteSet, isOpen = false, onToggle }: ExerciseCardProps) {
+export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings, onDeleteExercise, onDeleteSet, isOpen = false, onToggle, onUpdateSets }: ExerciseCardProps) {
   const { getPreviousSetData } = useWorkoutStore();
   const [showExerciseInfo, setShowExerciseInfo] = useState(false);
+  const [isEditingSets, setIsEditingSets] = useState(false);
+  const [editedSets, setEditedSets] = useState<any[]>([]);
+  const [editAnim] = useState(new Animated.Value(0));
+  const firstInputRef = React.useRef<TextInput>(null);
 
   // Timer state for time-based exercises
   const {
@@ -324,13 +329,75 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
     setRawTimeInput('');
   };
 
+  React.useEffect(() => {
+    if (isEditingSets) {
+      setEditedSets(exercise.sets.map((set: any) => ({ ...set })));
+      Animated.timing(editAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+      // Remove auto-focus logic
+      // setTimeout(() => {
+      //   firstInputRef.current?.focus();
+      // }, 250);
+    } else {
+      Animated.timing(editAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [isEditingSets, exercise.sets]);
+
+  const handleEditSetChange = (setIdx: number, field: 'weight' | 'reps', value: string) => {
+    setEditedSets(prev => prev.map((set, i) =>
+      i === setIdx ? { ...set, [field]: value.replace(/[^0-9.]/g, '') } : set
+    ));
+  };
+
+  const handleSaveEditedSets = () => {
+    // Log the sets being saved for debugging
+    console.log('Saving edited sets:', editedSets);
+    // Batch update sets if possible
+    if (onUpdateSets) {
+      onUpdateSets(editedSets.map(set => ({ ...set, weight: Number(set.weight) || 0, reps: Number(set.reps) || 0, id: set.id })));
+    } else {
+      editedSets.forEach((set, idx) => {
+        onLogSet({ ...set, weight: Number(set.weight) || 0, reps: Number(set.reps) || 0, id: set.id });
+      });
+    }
+    setIsEditingSets(false);
+  };
+
+  const handleCancelEditSets = () => {
+    setIsEditingSets(false);
+    setEditedSets([]);
+  };
+
   const renderSets = () => {
     return (
       <View style={styles.completedSets}>
-        <View style={styles.completedSetsHeader}>
+        <View style={styles.completedSetsHeaderRow}>
           <Text style={styles.completedSetsTitle}>Sets</Text>
+          {!isEditingSets ? (
+            <TouchableOpacity onPress={() => setIsEditingSets(true)} style={styles.editIconButton}>
+              <Edit3 size={18} color={Colors.accent} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.editActionRow}>
+              <TouchableOpacity onPress={handleSaveEditedSets} style={styles.editDoneButton}>
+                <CheckCircle size={22} color={Colors.primary} />
+                <Text style={styles.editActionText}>Done</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleCancelEditSets} style={styles.editCancelButton}>
+                <X size={22} color={Colors.error} />
+                <Text style={styles.editActionText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-        {exercise.sets.map((set: any, index: number) => {
+        {!isEditingSets && exercise.sets.map((set: any, index: number) => {
           const isDone = set.completed;
           let setText = '';
           switch (exercise.exercise.tracking_type) {
@@ -358,10 +425,8 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TouchableOpacity onPress={() => {
                   if (isDone) {
-                    // Mark as uncompleted (do NOT start rest timer)
                     onLogSet({ ...set, completed: false, timestamp: null });
                   } else {
-                    // Mark as completed and start rest timer if needed
                     onLogSet({ ...set, completed: true, timestamp: new Date().toISOString() });
                     if (exercise.exercise.tracking_type === 'time_only') {
                       adjustDuration(exercise.rest_time);
@@ -384,6 +449,66 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
             </View>
           );
         })}
+        <Animated.View style={[styles.editSetAnimContainer, { opacity: editAnim, height: isEditingSets ? undefined : 0 }]}>
+          {isEditingSets && <View style={styles.editDividerStrong} />}
+          {isEditingSets && editedSets.map((set: any, idx: number) => (
+            <View key={set.id} style={[styles.completedSetBox, styles.editSetBoxNeutral, styles.editSetRowContainer]}>
+              <Text style={styles.completedSetText}>Set {set.set_number}:</Text>
+              <View style={styles.editSetRowHorizontalNoWrap}>
+                {/* Weight */}
+                <View style={styles.editSetFieldGroupHorizontalNoWrap}>
+                  <TouchableOpacity
+                    style={styles.editAdjustButton}
+                    onPress={() => handleEditSetChange(idx, 'weight', String(Math.max(0, Number(set.weight) - 5)))}
+                  >
+                    <Minus size={20} color={Colors.primary} />
+                  </TouchableOpacity>
+                  <TextInput
+                    ref={idx === 0 ? firstInputRef : undefined}
+                    style={styles.editSetInputHorizontalNoWrap}
+                    value={String(set.weight)}
+                    onChangeText={val => handleEditSetChange(idx, 'weight', val)}
+                    keyboardType="numeric"
+                    placeholder="Weight"
+                    placeholderTextColor={Colors.secondary}
+                    maxLength={5}
+                  />
+                  <TouchableOpacity
+                    style={styles.editAdjustButton}
+                    onPress={() => handleEditSetChange(idx, 'weight', String(Number(set.weight) + 5))}
+                  >
+                    <Plus size={20} color={Colors.primary} />
+                  </TouchableOpacity>
+                </View>
+                {/* Reps */}
+                <View style={styles.editSetFieldGroupHorizontalNoWrap}>
+                  <TouchableOpacity
+                    style={styles.editAdjustButton}
+                    onPress={() => handleEditSetChange(idx, 'reps', String(Math.max(0, Number(set.reps) - 1)))}
+                  >
+                    <Minus size={20} color={Colors.primary} />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.editSetInputHorizontalNoWrap}
+                    value={String(set.reps)}
+                    onChangeText={val => handleEditSetChange(idx, 'reps', val)}
+                    keyboardType="numeric"
+                    placeholder="Reps"
+                    placeholderTextColor={Colors.secondary}
+                    maxLength={4}
+                  />
+                  <TouchableOpacity
+                    style={styles.editAdjustButton}
+                    onPress={() => handleEditSetChange(idx, 'reps', String(Number(set.reps) + 1))}
+                  >
+                    <Plus size={20} color={Colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ))}
+          {isEditingSets && <View style={styles.editDivider} />}
+        </Animated.View>
       </View>
     );
   };
@@ -870,5 +995,249 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     textAlign: 'center',
     minWidth: 80,
-  }
+  },
+  editActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    justifyContent: 'flex-end',
+  },
+  editDoneButton: {
+    backgroundColor: Colors.accent,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+  },
+  editCancelButton: {
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  editActionText: {
+    fontSize: FontSizes.body,
+    color: Colors.primary,
+    marginLeft: 6,
+    fontWeight: FontWeights.medium,
+  },
+  editSetAnimContainer: {
+    width: '100%',
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: 8,
+  },
+  editDivider: {
+    height: 1,
+    backgroundColor: Colors.divider,
+    marginVertical: 8,
+    width: '100%',
+    borderRadius: 1,
+  },
+  editSetBox: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  editSetRowContainer: {
+    marginBottom: 8,
+  },
+  editSetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+  },
+  editSetFieldGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editSetInput: {
+    fontSize: FontSizes.body,
+    fontWeight: FontWeights.medium,
+    color: Colors.primary,
+    backgroundColor: Colors.background,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    textAlign: 'center',
+    minWidth: 80,
+    flex: 1,
+  },
+  editAdjustButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    marginHorizontal: 1,
+  },
+  editSetUnit: {
+    fontSize: FontSizes.caption,
+    color: Colors.secondary,
+    marginTop: 4,
+  },
+  completedSetsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  editIconButton: {
+    marginLeft: 8,
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editSetRowHorizontal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    justifyContent: 'flex-start',
+    gap: 12,
+    width: '100%',
+    marginBottom: 4,
+  },
+  editSetFieldGroupHorizontal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginRight: 8,
+    gap: 4,
+    minWidth: 120,
+    maxWidth: 180,
+    flexShrink: 1,
+  },
+  editSetInputHorizontal: {
+    fontSize: FontSizes.body,
+    fontWeight: FontWeights.medium,
+    color: Colors.primary,
+    backgroundColor: Colors.background,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    textAlign: 'center',
+    minWidth: 40,
+    maxWidth: 60,
+    flexShrink: 1,
+    marginHorizontal: 2,
+  },
+  editSetBoxStrong: {
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 2,
+    borderColor: Colors.accent,
+    borderRadius: 14,
+    marginBottom: 8,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  editSetInputHorizontalStrong: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    backgroundColor: Colors.background,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    textAlign: 'center',
+    minWidth: 50,
+    maxWidth: 80,
+    flexShrink: 1,
+    marginHorizontal: 2,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+  },
+  editDividerStrong: {
+    height: 2,
+    backgroundColor: Colors.accent,
+    marginVertical: 10,
+    width: '100%',
+    borderRadius: 2,
+  },
+  editSetBoxNeutral: {
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 14,
+    marginBottom: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  editSetRowHorizontalNoWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    justifyContent: 'flex-start',
+    gap: 12,
+    width: '100%',
+    marginBottom: 4,
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  editSetFieldGroupHorizontalNoWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    marginRight: 8,
+    gap: 4,
+    minWidth: 80,
+    maxWidth: 120,
+    flexShrink: 1,
+  },
+  editSetInputHorizontalNoWrap: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 0,
+    textAlign: 'center',
+    minWidth: 60,
+    maxWidth: 80,
+    flexShrink: 1,
+    marginHorizontal: 2,
+    borderWidth: 0,
+    borderColor: 'transparent',
+  },
 });

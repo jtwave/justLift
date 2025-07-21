@@ -7,11 +7,11 @@ import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { useLocalSearchParams, router } from 'expo-router';
-import { 
-  ArrowLeft, 
-  User, 
-  UserPlus, 
-  UserCheck, 
+import {
+  ArrowLeft,
+  User,
+  UserPlus,
+  UserCheck,
   Users,
   Dumbbell,
   Calendar,
@@ -37,7 +37,7 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -52,19 +52,19 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
   };
 
   const getTotalSets = (exercises: any[]) => {
-    return exercises.reduce((total, exercise) => 
+    return exercises.reduce((total, exercise) =>
       total + exercise.sets.filter((set: any) => set.completed).length, 0);
   };
 
   const getTotalVolume = (exercises: any[]) => {
-    return exercises.reduce((total, exercise) => 
-      total + exercise.sets.reduce((setTotal: number, set: any) => 
+    return exercises.reduce((total, exercise) =>
+      total + exercise.sets.reduce((setTotal: number, set: any) =>
         setTotal + (set.completed ? Number(set.weight) * set.reps : 0), 0), 0);
   };
 
   // Create swipeable items array
   const swipeableItems: PostMediaItem[] = [];
-  
+
   // Add media if present
   if (post.media_url) {
     swipeableItems.push({
@@ -75,7 +75,7 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
       }
     });
   }
-  
+
   // Always add workout details as the last item
   swipeableItems.push({
     type: 'workout',
@@ -100,8 +100,8 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
             </View>
           )}
           {item.data.type === 'photo' ? (
-            <Image 
-              source={{ uri: item.data.url }} 
+            <Image
+              source={{ uri: item.data.url }}
               style={styles.workoutMedia}
               resizeMode="cover"
               onLoadStart={() => setImageLoading(true)}
@@ -115,8 +115,8 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
               }}
             />
           ) : (
-            <Image 
-              source={{ uri: item.data.url }} 
+            <Image
+              source={{ uri: item.data.url }}
               style={styles.workoutMedia}
               resizeMode="cover"
               onLoadStart={() => setImageLoading(true)}
@@ -207,7 +207,7 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
           }}
           style={styles.swipeableList}
         />
-        
+
         {/* Page Indicators */}
         {swipeableItems.length > 1 && (
           <View style={styles.pageIndicators}>
@@ -236,15 +236,15 @@ const WorkoutPostCard = ({ post }: { post: any }) => {
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const { user: currentUser } = useAuth();
-  const { 
-    following, 
-    followers, 
-    loadFollowing, 
-    loadFollowers, 
-    followUser, 
-    unfollowUser 
+  const {
+    following,
+    followers,
+    loadFollowing,
+    loadFollowers,
+    followUser,
+    unfollowUser
   } = useSocialStore();
-  
+
   const [profile, setProfile] = useState<any>(null);
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,7 +277,7 @@ export default function UserProfileScreen() {
   const loadUserProfile = async () => {
     try {
       setLoading(true);
-      
+
       // Get user profile by username
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -325,6 +325,7 @@ export default function UserProfileScreen() {
           workout: {
             ...post.workout,
             exercises: post.workout.workout_exercises.map((we: any) => ({
+              exercise_id: we.exercise_id,
               exercise: we.exercise,
               sets: we.workout_sets
             }))
@@ -376,7 +377,7 @@ export default function UserProfileScreen() {
         setIsFollowing(true);
         setFollowersCount(prev => prev + 1);
       }
-      
+
       // Reload the profile to get updated counts from database
     } catch (error) {
       console.error('Error toggling follow:', error);
@@ -388,7 +389,7 @@ export default function UserProfileScreen() {
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -397,13 +398,13 @@ export default function UserProfileScreen() {
   };
 
   const getTotalSets = (exercises: any[]) => {
-    return exercises.reduce((total, exercise) => 
+    return exercises.reduce((total, exercise) =>
       total + exercise.sets.filter((set: any) => set.completed).length, 0);
   };
 
   const getTotalVolume = (exercises: any[]) => {
-    return exercises.reduce((total, exercise) => 
-      total + exercise.sets.reduce((setTotal: number, set: any) => 
+    return exercises.reduce((total, exercise) =>
+      total + exercise.sets.reduce((setTotal: number, set: any) =>
         setTotal + (set.completed ? Number(set.weight) * set.reps : 0), 0), 0);
   };
 
@@ -463,12 +464,12 @@ export default function UserProfileScreen() {
               <User size={40} color={Colors.secondary} />
             </View>
           )}
-          
+
           <Text style={styles.profileName}>
             {profile.full_name || profile.username}
           </Text>
           <Text style={styles.profileUsername}>@{profile.username}</Text>
-          
+
           {profile.bio && (
             <Text style={styles.profileBio}>{profile.bio}</Text>
           )}
@@ -527,7 +528,7 @@ export default function UserProfileScreen() {
               <Dumbbell size={48} color={Colors.secondary} />
               <Text style={styles.emptyWorkoutsTitle}>No workouts shared</Text>
               <Text style={styles.emptyWorkoutsText}>
-                {isOwnProfile 
+                {isOwnProfile
                   ? "Start sharing your workouts to build your fitness profile"
                   : `${profile.username} hasn't shared any workouts yet`
                 }

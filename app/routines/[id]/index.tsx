@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -12,7 +12,7 @@ export default function RoutineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { routines, loadRoutines, deleteRoutine } = useRoutineStore();
   const { startWorkout } = useWorkoutStore();
-  
+
   const [routine, setRoutine] = useState<any>(null);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function RoutineDetailScreen() {
 
   const handleStartWorkout = async () => {
     if (!routine) return;
-    
+
     try {
       await startWorkout(routine.name, routine.id);
       router.push('/workout');
@@ -45,18 +45,38 @@ export default function RoutineDetailScreen() {
 
   const handleDelete = () => {
     if (!routine) return;
-    
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Are you sure you want to delete "${routine.name}"?`)) {
+        (async () => {
+          try {
+            await deleteRoutine(routine.id);
+            await loadRoutines();
+            router.back();
+          } catch (error) {
+            alert('Failed to delete routine: ' + (error?.message || error?.toString() || 'Unknown error'));
+          }
+        })();
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete Routine',
       `Are you sure you want to delete "${routine.name}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteRoutine(routine.id);
-            router.back();
+            try {
+              await deleteRoutine(routine.id);
+              await loadRoutines();
+              router.back();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete routine: ' + (error?.message || error?.toString() || 'Unknown error'));
+            }
           }
         }
       ]

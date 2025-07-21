@@ -19,7 +19,7 @@ interface RoutineStore {
 
   // Actions
   loadRoutines: () => Promise<void>;
-  createRoutine: (name: string, description: string | null, exerciseIds: string[]) => Promise<void>;
+  createRoutine: (name: string, description: string | null, exerciseConfigs: any[]) => Promise<void>;
   updateRoutine: (routineId: string, name: string, description: string | null) => Promise<void>;
   deleteRoutine: (routineId: string) => Promise<void>;
   addExerciseToRoutine: (routineId: string, exerciseId: string, orderIndex: number) => Promise<void>;
@@ -70,7 +70,7 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     }
   },
 
-  createRoutine: async (name: string, description: string | null, exerciseIds: string[]) => {
+  createRoutine: async (name: string, description: string | null, exerciseConfigs: any[]) => {
     try {
       set({ loading: true, error: null });
       const { data: user } = await supabase.auth.getUser();
@@ -89,12 +89,14 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
 
       if (routineError) throw routineError;
 
-      // Add exercises to the routine
-      if (exerciseIds.length > 0) {
-        const routineExercises = exerciseIds.map((exerciseId, index) => ({
+      // Add exercises to the routine with default_sets
+      if (exerciseConfigs.length > 0) {
+        const routineExercises = exerciseConfigs.map((config, index) => ({
           routine_id: routine.id,
-          exercise_id: exerciseId,
+          exercise_id: config.exercise_id,
           order_index: index,
+          default_rest_time: config.rest_time ?? 90,
+          default_sets: config.sets ? JSON.stringify(config.sets) : null,
         }));
 
         const { error: exercisesError } = await supabase
