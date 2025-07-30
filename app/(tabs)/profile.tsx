@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Dimensions, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Dimensions, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotificationStore } from '@/store/notificationStore';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import {
   Settings,
   User,
@@ -24,27 +24,33 @@ const { width } = Dimensions.get('window');
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { following, followers, loadFollowing, loadFollowers } = useSocialStore();
-  const { getUnreadCount, loadNotifications } = useNotificationStore();
+  const { getUnreadCount, loadNotifications, notifications } = useNotificationStore();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
 
   // Load profile when screen comes into focus, but only if we don't have data
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!profile || !initialLoad) {
-        loadProfile();
-      }
-      // Always refresh notifications when screen comes into focus
-      loadNotifications();
-    }, [profile, initialLoad])
-  );
+  // Removed useFocusEffect since data is preloaded in root layout
 
   // Initial load when component mounts
   useEffect(() => {
-    loadProfile();
-    loadNotifications();
+    // Only load if we don't have data yet
+    if (!profile) {
+      loadProfile();
+    }
+    if (notifications.length === 0) {
+      loadNotifications();
+    }
+
+    // Set layout ready after a brief delay to prevent janky transitions
+    const timer = setTimeout(() => {
+      setLayoutReady(true);
+    }, 25); // Reduced from 50ms to 25ms
+
+    return () => clearTimeout(timer);
   }, []);
 
   // Update unread count when notifications change
@@ -102,6 +108,22 @@ export default function ProfileScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        loadProfile(),
+        loadNotifications(),
+        loadFollowing(profile?.id || ''),
+        loadFollowers(profile?.id || '')
+      ]);
+    } catch (error) {
+      console.error('Error refreshing profile:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleSignOut = async () => {
     console.log('Sign out button pressed');
     try {
@@ -125,7 +147,7 @@ export default function ProfileScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={Colors.secondary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </SafeAreaView>
@@ -143,168 +165,181 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.profileSection}>
-          <TouchableOpacity
-            style={styles.avatarContainer}
-            onPress={() => router.push('/profile/edit')}
-          >
-            {displayAvatar ? (
-              <Image source={{ uri: displayAvatar }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <User size={32} color={Colors.accent} />
-              </View>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.profileName}>
-            {displayName}
-          </Text>
-          {displayUsername && (
-            <Text style={styles.profileUsername}>
-              @{displayUsername}
-            </Text>
-          )}
-          <Text style={styles.profileSubtitle}>
-            {displayEmail}
-          </Text>
-          {displayBio && (
-            <Text style={styles.profileBio}>
-              {displayBio}
-            </Text>
-          )}
-          <TouchableOpacity
-            style={styles.editProfileButton}
-            onPress={() => router.push('/profile/edit')}
-          >
-            <Text style={styles.editProfileText}>Edit Profile</Text>
-          </TouchableOpacity>
-
-          {/* Social Stats - Show immediately with current values */}
-          <View style={styles.socialStats}>
+      {layoutReady && (
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.secondary]}
+              tintColor={Colors.secondary}
+            />
+          }
+        >
+          <View style={styles.profileSection}>
             <TouchableOpacity
-              style={styles.socialStat}
-              onPress={() => router.push('/profile/followers')}
+              style={styles.avatarContainer}
+              onPress={() => router.push('/profile/edit')}
             >
-              <Text style={styles.socialStatNumber}>{followersCount}</Text>
-              <Text style={styles.socialStatLabel}>Followers</Text>
+              {displayAvatar ? (
+                <Image source={{ uri: displayAvatar }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <User size={32} color={Colors.accent} />
+                </View>
+              )}
             </TouchableOpacity>
+            <Text style={styles.profileName}>
+              {displayName}
+            </Text>
+            {displayUsername && (
+              <Text style={styles.profileUsername}>
+                @{displayUsername}
+              </Text>
+            )}
+            <Text style={styles.profileSubtitle}>
+              {displayEmail}
+            </Text>
+            {displayBio && (
+              <Text style={styles.profileBio}>
+                {displayBio}
+              </Text>
+            )}
             <TouchableOpacity
-              style={styles.socialStat}
-              onPress={() => router.push('/profile/following')}
+              style={styles.editProfileButton}
+              onPress={() => router.push('/profile/edit')}
             >
-              <Text style={styles.socialStatNumber}>{followingCount}</Text>
-              <Text style={styles.socialStatLabel}>Following</Text>
+              <Text style={styles.editProfileText}>Edit Profile</Text>
+            </TouchableOpacity>
+
+            {/* Social Stats - Show immediately with current values */}
+            <View style={styles.socialStats}>
+              <TouchableOpacity
+                style={styles.socialStat}
+                onPress={() => router.push('/profile/followers')}
+              >
+                <Text style={styles.socialStatNumber}>{followersCount}</Text>
+                <Text style={styles.socialStatLabel}>Followers</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.socialStat}
+                onPress={() => router.push('/profile/following')}
+              >
+                <Text style={styles.socialStatNumber}>{followingCount}</Text>
+                <Text style={styles.socialStatLabel}>Following</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Progress Tracking */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Social</Text>
+
+            {/* Find Friends */}
+            <TouchableOpacity
+              style={styles.dashboardCard}
+              onPress={() => router.push('/search')}
+            >
+              <View style={styles.dashboardCardLeft}>
+                <UserPlus size={24} color={Colors.accent} />
+                <View style={styles.dashboardCardInfo}>
+                  <Text style={styles.dashboardCardTitle}>Find Friends</Text>
+                  <Text style={styles.dashboardCardSubtitle}>
+                    Search for people to follow
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={20} color={Colors.secondary} />
+            </TouchableOpacity>
+
+            {/* Notifications */}
+            <TouchableOpacity
+              style={styles.dashboardCard}
+              onPress={() => router.push('/notifications')}
+            >
+              <View style={styles.dashboardCardLeft}>
+                <View style={styles.notificationIconContainer}>
+                  <Bell size={24} color={Colors.accent} />
+                  {unreadCount > 0 && (
+                    <View style={styles.notificationBadge}>
+                      <Text style={styles.notificationBadgeText}>
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.dashboardCardInfo}>
+                  <Text style={styles.dashboardCardTitle}>Notifications</Text>
+                  <Text style={styles.dashboardCardSubtitle}>
+                    {unreadCount > 0
+                      ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
+                      : 'No new notifications'
+                    }
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={20} color={Colors.secondary} />
+            </TouchableOpacity>
+
+            {/* My Workouts */}
+            <TouchableOpacity
+              style={styles.dashboardCard}
+              onPress={() => router.push('/profile/workouts')}
+            >
+              <View style={styles.dashboardCardLeft}>
+                <Dumbbell size={24} color={Colors.accent} />
+                <View style={styles.dashboardCardInfo}>
+                  <Text style={styles.dashboardCardTitle}>My Workouts</Text>
+                  <Text style={styles.dashboardCardSubtitle}>
+                    View your workout history and progress
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={20} color={Colors.secondary} />
+            </TouchableOpacity>
+
+            {/* Settings */}
+            <TouchableOpacity
+              style={styles.dashboardCard}
+              onPress={() => router.push('/profile/settings')}
+            >
+              <View style={styles.dashboardCardLeft}>
+                <Settings size={24} color={Colors.accent} />
+                <View style={styles.dashboardCardInfo}>
+                  <Text style={styles.dashboardCardTitle}>Settings</Text>
+                  <Text style={styles.dashboardCardSubtitle}>
+                    App preferences and account settings
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={20} color={Colors.secondary} />
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Progress Tracking */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Social</Text>
-
-          {/* Find Friends */}
-          <TouchableOpacity
-            style={styles.dashboardCard}
-            onPress={() => router.push('/search')}
-          >
-            <View style={styles.dashboardCardLeft}>
-              <UserPlus size={24} color={Colors.accent} />
-              <View style={styles.dashboardCardInfo}>
-                <Text style={styles.dashboardCardTitle}>Find Friends</Text>
-                <Text style={styles.dashboardCardSubtitle}>
-                  Search for people to follow
-                </Text>
+          {/* Sign Out */}
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={[styles.dashboardCard, styles.signOutCard]}
+              onPress={handleSignOut}
+            >
+              <View style={styles.dashboardCardLeft}>
+                <User size={24} color={Colors.error} />
+                <View style={styles.dashboardCardInfo}>
+                  <Text style={[styles.dashboardCardTitle, { color: Colors.error }]}>Sign Out</Text>
+                  <Text style={styles.dashboardCardSubtitle}>
+                    Sign out of your account
+                  </Text>
+                </View>
               </View>
-            </View>
-            <ChevronRight size={20} color={Colors.secondary} />
-          </TouchableOpacity>
-
-          {/* Notifications */}
-          <TouchableOpacity
-            style={styles.dashboardCard}
-            onPress={() => router.push('/notifications')}
-          >
-            <View style={styles.dashboardCardLeft}>
-              <View style={styles.notificationIconContainer}>
-                <Bell size={24} color={Colors.accent} />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.dashboardCardInfo}>
-                <Text style={styles.dashboardCardTitle}>Notifications</Text>
-                <Text style={styles.dashboardCardSubtitle}>
-                  {unreadCount > 0
-                    ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
-                    : 'No new notifications'
-                  }
-                </Text>
-              </View>
-            </View>
-            <ChevronRight size={20} color={Colors.secondary} />
-          </TouchableOpacity>
-
-          {/* My Workouts */}
-          <TouchableOpacity
-            style={styles.dashboardCard}
-            onPress={() => router.push('/profile/workouts')}
-          >
-            <View style={styles.dashboardCardLeft}>
-              <Dumbbell size={24} color={Colors.accent} />
-              <View style={styles.dashboardCardInfo}>
-                <Text style={styles.dashboardCardTitle}>My Workouts</Text>
-                <Text style={styles.dashboardCardSubtitle}>
-                  View your workout history and progress
-                </Text>
-              </View>
-            </View>
-            <ChevronRight size={20} color={Colors.secondary} />
-          </TouchableOpacity>
-
-          {/* Settings */}
-          <TouchableOpacity
-            style={styles.dashboardCard}
-            onPress={() => router.push('/profile/settings')}
-          >
-            <View style={styles.dashboardCardLeft}>
-              <Settings size={24} color={Colors.accent} />
-              <View style={styles.dashboardCardInfo}>
-                <Text style={styles.dashboardCardTitle}>Settings</Text>
-                <Text style={styles.dashboardCardSubtitle}>
-                  App preferences and account settings
-                </Text>
-              </View>
-            </View>
-            <ChevronRight size={20} color={Colors.secondary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Sign Out */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.dashboardCard, styles.signOutCard]}
-            onPress={handleSignOut}
-          >
-            <View style={styles.dashboardCardLeft}>
-              <User size={24} color={Colors.error} />
-              <View style={styles.dashboardCardInfo}>
-                <Text style={[styles.dashboardCardTitle, { color: Colors.error }]}>Sign Out</Text>
-                <Text style={styles.dashboardCardSubtitle}>
-                  Sign out of your account
-                </Text>
-              </View>
-            </View>
-            <ChevronRight size={20} color={Colors.secondary} />
-          </TouchableOpacity>
-        </View>
-        {/* Add bottom padding so Sign Out is not blocked by tab bar */}
-        <View style={{ height: 48 }} />
-      </ScrollView>
+              <ChevronRight size={20} color={Colors.secondary} />
+            </TouchableOpacity>
+          </View>
+          {/* Add bottom padding so Sign Out is not blocked by tab bar */}
+          <View style={{ height: 48 }} />
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -313,6 +348,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+    minHeight: '100%', // Ensure full height to prevent shifts
   },
   loadingContainer: {
     flex: 1,
@@ -326,6 +362,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    backgroundColor: Colors.background, // Ensure background is set
   },
   header: {
     paddingHorizontal: 24,

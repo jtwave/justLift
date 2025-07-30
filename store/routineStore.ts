@@ -20,7 +20,7 @@ interface RoutineStore {
   // Actions
   loadRoutines: () => Promise<void>;
   createRoutine: (name: string, description: string | null, exerciseConfigs: any[]) => Promise<void>;
-  updateRoutine: (routineId: string, name: string, description: string | null) => Promise<void>;
+  updateRoutine: (routineId: string, name: string, description: string | null, exerciseConfigs?: any[]) => Promise<void>;
   deleteRoutine: (routineId: string) => Promise<void>;
   addExerciseToRoutine: (routineId: string, exerciseId: string, orderIndex: number) => Promise<void>;
   removeExerciseFromRoutine: (routineExerciseId: string) => Promise<void>;
@@ -115,16 +115,43 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     }
   },
 
-  updateRoutine: async (routineId: string, name: string, description: string | null) => {
+  updateRoutine: async (routineId: string, name: string, description: string | null, exerciseConfigs?: any[]) => {
     try {
       set({ loading: true, error: null });
 
+      // Update basic routine info
       const { error } = await supabase
         .from('workout_routines')
         .update({ name, description })
         .eq('id', routineId);
 
       if (error) throw error;
+
+      // If exerciseConfigs are provided, update the exercises
+      if (exerciseConfigs && exerciseConfigs.length > 0) {
+        // First, delete existing routine exercises
+        const { error: deleteError } = await supabase
+          .from('routine_exercises')
+          .delete()
+          .eq('routine_id', routineId);
+
+        if (deleteError) throw deleteError;
+
+        // Then add new routine exercises
+        const routineExercises = exerciseConfigs.map((config, index) => ({
+          routine_id: routineId,
+          exercise_id: config.exercise_id,
+          order_index: index,
+          default_rest_time: config.rest_time ?? 90,
+          default_sets: config.sets ? JSON.stringify(config.sets) : null,
+        }));
+
+        const { error: exercisesError } = await supabase
+          .from('routine_exercises')
+          .insert(routineExercises);
+
+        if (exercisesError) throw exercisesError;
+      }
 
       // Update local state
       set({
@@ -134,6 +161,9 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
             : routine
         )
       });
+
+      // Reload routines to get updated data
+      get().loadRoutines();
     } catch (error) {
       set({ error: (error as Error).message });
     } finally {

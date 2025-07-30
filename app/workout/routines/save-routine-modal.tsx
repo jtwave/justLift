@@ -130,7 +130,7 @@ export default function SaveRoutineModalScreen() {
     if (!workoutExercisesParam || !exercises || exercises.length === 0) {
         return (
             <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
-                <ActivityIndicator size="large" color={Colors.accent} />
+                <ActivityIndicator size="large" color={Colors.secondary} />
                 <Text style={{ color: Colors.primary, marginTop: 16 }}>Loading routine...</Text>
             </SafeAreaView>
         );
@@ -300,6 +300,12 @@ export default function SaveRoutineModalScreen() {
                     )}
                 </View>
             </ScrollView>
+            {saving && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color={Colors.secondary} />
+                    <Text style={styles.loadingText}>Saving routine...</Text>
+                </View>
+            )}
         </SafeAreaView>
     );
 }
@@ -518,5 +524,21 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: Colors.primary,
         fontWeight: FontWeights.medium,
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        zIndex: 100,
+    },
+    loadingText: {
+        color: Colors.secondary,
+        marginTop: 10,
+        fontSize: 16,
     },
 }); 

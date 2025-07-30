@@ -33,19 +33,6 @@ interface WorkoutSummaryModalProps {
 }
 
 export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: WorkoutSummaryModalProps) {
-  // Debug logging
-  React.useEffect(() => {
-    console.log('WorkoutSummaryModal - visible:', visible, 'workout:', !!workout);
-    if (workout) {
-      console.log('Workout data:', {
-        name: workout.name,
-        exercises: workout.exercises?.length || 0,
-        start_time: workout.start_time,
-        end_time: workout.end_time
-      });
-    }
-  }, [visible, workout]);
-
   const [showSaveRoutine, setShowSaveRoutine] = useState(false);
   const [routineName, setRoutineName] = useState('');
   const [routineDescription, setRoutineDescription] = useState('');
@@ -257,17 +244,9 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
 
   const handleSaveWorkout = async () => {
     try {
-      console.log('Saving workout with details:', {
-        workoutId: workout.id,
-        title: workoutTitle.trim(),
-        description: workoutDescription.trim(),
-        visibility: visibility
-      });
-
       // Update workout details first
       if (workout.id && workoutTitle.trim()) {
         await updateWorkoutDetails(workout.id, workoutTitle.trim(), workoutDescription.trim() || undefined);
-        console.log('Workout details updated successfully');
       }
 
       let uploadedMediaUrl = selectedMedia;
@@ -285,7 +264,6 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
       // Save the media as progress photo if it's a photo
       if (uploadedMediaUrl && mediaType === 'photo') {
         await addProgressPhoto(uploadedMediaUrl, workoutDescription);
-        console.log('Progress photo saved');
       }
 
       // Create or delete workout post based on visibility setting
@@ -298,15 +276,11 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
           mediaType || undefined,
           isPublic
         );
-        console.log(`Workout post created with visibility: ${visibility}`);
       } else if (visibility === 'private') {
         // If a post exists for this workout, delete it
         const existingPost = await loadWorkoutPost(workout.id);
         if (existingPost) {
           await deleteWorkoutPost(existingPost.id);
-          console.log('Deleted existing workout post for private visibility');
-        } else {
-          console.log('Workout saved as private - no post created');
         }
       }
 
@@ -318,7 +292,6 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
       // Call the parent's onSave which will handle finishing the workout
       onSave();
     } catch (error) {
-      console.error('Error saving workout:', error);
       Alert.alert('Error', `Failed to save workout: ${(error as Error).message}`);
     }
   };

@@ -90,7 +90,7 @@ export function useRestTimer() {
   };
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval> | undefined;
 
     if (isActive && timeLeft > 0) {
       interval = setInterval(() => {
@@ -108,19 +108,21 @@ export function useRestTimer() {
       }, 1000);
     }
 
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [isActive, timeLeft]);
 
-  const scheduleTimerNotification = async (seconds?: number) => {
+  const scheduleTimerNotification = async () => {
     try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
+      // Only show notification when timer actually completes
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Rest Timer Complete!',
           body: 'Your rest period is over. Time to get back to your workout!',
           sound: true,
         },
-        trigger: { seconds: seconds ?? timeLeft },
+        trigger: null, // Show immediately
       });
     } catch (error) {
       console.error('Error scheduling notification:', error);
@@ -134,7 +136,7 @@ export function useRestTimer() {
     setIsActive(true);
     setTimerStartTime(startTime);
     setDuration(time);
-    scheduleTimerNotification(time);
+    // Don't schedule notification immediately - only when timer completes
   }, [duration]);
 
   const pauseTimer = useCallback(async () => {
@@ -152,12 +154,11 @@ export function useRestTimer() {
   }, []);
 
   const adjustDuration = useCallback((newDuration: number) => {
-    console.log('useRestTimer: Adjusting duration from', duration, 'to', newDuration);
     setDuration(newDuration);
-    setTimeLeft(newDuration);
-    setIsActive(false); // Stop any active timer
-    setTimerStartTime(null);
-  }, [duration]);
+    if (timeLeft > newDuration) {
+      setTimeLeft(newDuration);
+    }
+  }, [timeLeft]);
 
   const formatTime = useCallback((seconds: number) => {
     const minutes = Math.floor(seconds / 60);

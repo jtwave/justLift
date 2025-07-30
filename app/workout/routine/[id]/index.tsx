@@ -12,7 +12,7 @@ export default function RoutineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { routines, loadRoutines, deleteRoutine } = useRoutineStore();
   const { startWorkout } = useWorkoutStore();
-
+  
   const [routine, setRoutine] = useState<any>(null);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function RoutineDetailScreen() {
 
   const handleStartWorkout = async () => {
     if (!routine) return;
-
+    
     try {
       await startWorkout(routine.name, routine.id);
       router.push('/workout/active');
@@ -51,16 +51,16 @@ export default function RoutineDetailScreen() {
       `Are you sure you want to delete "${routine.name}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
+        { 
+          text: 'Delete', 
           style: 'destructive',
           onPress: async () => {
             console.log('Alert Delete button pressed for routine:', routine.id);
             try {
               console.log('Attempting to delete routine:', routine.id);
-              await deleteRoutine(routine.id);
+            await deleteRoutine(routine.id);
               console.log('Routine deleted successfully');
-              router.back();
+            router.back();
             } catch (error) {
               console.error('Error deleting routine:', error);
               Alert.alert('Error', 'Failed to delete routine: ' + (error?.message || error?.toString() || 'Unknown error'));

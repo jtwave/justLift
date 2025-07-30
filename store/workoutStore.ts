@@ -41,6 +41,7 @@ interface WorkoutStore {
   setActiveExercise: (workoutExerciseId: string) => Promise<void>;
   getPreviousSetData: (exerciseId: string, setNumber: number) => PreviousSetData | null;
   updateRestTime: (workoutExerciseId: string, restTime: number) => Promise<void>;
+  reorderExercises: (exerciseIds: string[]) => Promise<void>;
   saveWorkoutAsRoutine: (
     workoutId: string,
     routineName: string,
@@ -109,10 +110,10 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
       const formattedWorkouts = workouts?.map(workout => ({
         ...workout,
-        exercises: workout.workout_exercises.map(we => ({
+        exercises: workout.workout_exercises.map((we: any) => ({
           ...we,
-          sets: we.workout_sets.sort((a, b) => a.set_number - b.set_number)
-        })).sort((a, b) => a.order_index - b.order_index)
+          sets: we.workout_sets.sort((a: any, b: any) => a.set_number - b.set_number)
+        })).sort((a: any, b: any) => a.order_index - b.order_index)
       })) || [];
 
       set({ workoutHistory: formattedWorkouts });
@@ -125,15 +126,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
   loadCurrentWorkout: async () => {
     try {
-      console.log('=== LOAD CURRENT WORKOUT START ===');
       set({ loading: true, error: null });
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) {
-        console.log('No user found, skipping workout load');
         return;
       }
-
-      console.log('Loading current workout for user:', user.user.id);
 
       // Join exercise_notes for the current user
       const { data: workouts, error } = await supabase
@@ -155,15 +152,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         .limit(1);
 
       if (error) {
-        console.error('Database error loading current workout:', error);
         throw error;
       }
 
-      console.log('Database query successful, workouts found:', workouts?.length || 0);
-
       if (workouts && workouts.length > 0) {
         const workout = workouts[0];
-        console.log('Processing workout:', workout.id, workout.name);
 
         // Map user_note from exercise_note for each exercise
         const formattedWorkout = {
@@ -179,7 +172,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       } else {
         set({ currentWorkout: null });
       }
-      console.log('=== LOAD CURRENT WORKOUT END ===');
     } catch (error) {
       set({ error: (error as Error).message });
     } finally {
@@ -290,7 +282,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       if (!currentWorkout) return;
 
       set({ loading: true, error: null });
-      console.log('Finishing workout:', currentWorkout.id);
 
       const { error } = await supabase
         .from('workouts')
@@ -301,17 +292,14 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         .eq('id', currentWorkout.id);
 
       if (error) throw error;
-      console.log('Workout finished successfully');
 
       // Clear current workout immediately
       set({ currentWorkout: null });
 
       // Reload workout history immediately
       await get().loadWorkoutHistory();
-      console.log('Workout history reloaded');
 
     } catch (error) {
-      console.error('Error finishing workout:', error);
       set({ error: (error as Error).message });
     } finally {
       set({ loading: false });
@@ -452,11 +440,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
       set({ loading: true, error: null });
 
-      console.log('=== ADD WORKOUT SET START ===');
-      console.log('workoutExerciseId:', workoutExerciseId);
-      console.log('setData:', setData);
-      console.log('Current workout exercises:', currentWorkout.exercises.map(ex => ({ id: ex.id, name: ex.exercise.name, setsCount: ex.sets.length })));
-
       const { data, error } = await supabase
         .from('workout_sets')
         .insert({
@@ -473,8 +456,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         throw error;
       }
 
-      console.log('Database response:', data);
-
       set({
         currentWorkout: {
           ...currentWorkout,
@@ -485,9 +466,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
           )
         }
       });
-
-      console.log('Updated current workout exercises:', get().currentWorkout?.exercises.map(ex => ({ id: ex.id, name: ex.exercise.name, setsCount: ex.sets.length })));
-      console.log('=== ADD WORKOUT SET END ===');
     } catch (error) {
       console.error('Error in addWorkoutSet:', error);
       set({ error: (error as Error).message });
@@ -584,6 +562,32 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }
   },
 
+  reorderExercises: async (exerciseIds: string[]) => {
+    try {
+      const { currentWorkout } = get();
+      if (!currentWorkout) return;
+
+      set({ loading: true, error: null });
+
+      // Update the order_index of each exercise in the database
+      for (let i = 0; i < exerciseIds.length; i++) {
+        const { error } = await supabase
+          .from('workout_exercises')
+          .update({ order_index: i })
+          .eq('id', exerciseIds[i]);
+
+        if (error) throw error;
+      }
+
+      // Reload current workout to get fresh state
+      await get().loadCurrentWorkout();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
   saveWorkoutAsRoutine: async (
     workoutId: string,
     routineName: string,
@@ -669,9 +673,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   updateWorkoutDetails: async (workoutId: string, name: string, description?: string) => {
     try {
       set({ loading: true, error: null });
-      console.log('Updating workout details:', { workoutId, name, description });
-
-      console.log('Updating workout details:', { workoutId, name, description });
 
       const { error } = await supabase
         .from('workouts')
@@ -682,13 +683,9 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         .eq('id', workoutId);
 
       if (error) {
-        console.error('Database error updating workout:', error);
         throw error;
       }
-
-      console.log('Workout details updated successfully in database');
     } catch (error) {
-      console.error('Error in updateWorkoutDetails:', error);
       set({ error: (error as Error).message });
       throw error; // Re-throw so the UI can handle it
     } finally {
@@ -699,7 +696,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   discardWorkout: async (workoutId: string) => {
     try {
       set({ loading: true, error: null });
-      console.log('Discarding workout:', workoutId);
 
       // First, get all workout exercises for this workout
       const { data: workoutExercises, error: exercisesError } = await supabase
@@ -718,7 +714,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
           .in('workout_exercise_id', exerciseIds);
 
         if (setsError) throw setsError;
-        console.log('Deleted workout sets');
       }
 
       // Delete all workout exercises for this workout
@@ -728,7 +723,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         .eq('workout_id', workoutId);
 
       if (deleteExercisesError) throw deleteExercisesError;
-      console.log('Deleted workout exercises');
 
       // Finally, delete the workout itself
       const { error } = await supabase
@@ -737,7 +731,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         .eq('id', workoutId);
 
       if (error) throw error;
-      console.log('Workout discarded successfully');
 
       // Clear current workout immediately
       set({ currentWorkout: null });
@@ -750,7 +743,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       // Also reload workout history from database to ensure consistency
       await get().loadWorkoutHistory();
     } catch (error) {
-      console.error('Error discarding workout:', error);
       set({ error: (error as Error).message });
     } finally {
       set({ loading: false });

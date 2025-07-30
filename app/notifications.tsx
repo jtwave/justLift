@@ -105,10 +105,62 @@ export default function NotificationsScreen() {
                     <Text style={styles.headerTitle}>Notifications</Text>
                     <View style={styles.placeholder} />
                 </View>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={Colors.accent} />
-                    <Text style={styles.loadingText}>Loading notifications...</Text>
-                </View>
+                {loading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={Colors.secondary} />
+                        <Text style={styles.loadingText}>Loading notifications...</Text>
+                    </View>
+                ) : (
+                    <ScrollView
+                        style={styles.content}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={onRefresh}
+                                colors={[Colors.secondary]}
+                                tintColor={Colors.secondary}
+                            />
+                        }
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {notifications.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Bell size={48} color={Colors.secondary} />
+                                <Text style={styles.emptyStateTitle}>No notifications yet</Text>
+                                <Text style={styles.emptyStateText}>
+                                    When you get comments, likes, or new posts from people you follow, they'll appear here.
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={styles.notificationsList}>
+                                {notifications.map((notification) => (
+                                    <TouchableOpacity
+                                        key={notification.id}
+                                        style={[
+                                            styles.notificationItem,
+                                            !notification.is_read && styles.unreadNotification
+                                        ]}
+                                        onPress={() => handleNotificationPress(notification)}
+                                    >
+                                        <View style={styles.notificationIcon}>
+                                            {getNotificationIcon(notification.type)}
+                                        </View>
+                                        <View style={styles.notificationContent}>
+                                            <Text style={styles.notificationTitle}>{notification.title}</Text>
+                                            <Text style={styles.notificationBody}>{notification.body}</Text>
+                                            <Text style={styles.notificationTime}>
+                                                {formatTimeAgo(notification.created_at)}
+                                            </Text>
+                                        </View>
+                                        {!notification.is_read && (
+                                            <View style={styles.unreadDot} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </ScrollView>
+                )}
             </SafeAreaView>
         );
     }
@@ -130,7 +182,12 @@ export default function NotificationsScreen() {
             <ScrollView
                 style={styles.content}
                 refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={[Colors.secondary]}
+                        tintColor={Colors.secondary}
+                    />
                 }
                 showsVerticalScrollIndicator={false}
             >

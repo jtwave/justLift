@@ -13,34 +13,29 @@ interface RestTimerProps {
   compact?: boolean;
 }
 
-export function RestTimer({ 
-  visible, 
-  onClose, 
-  onComplete, 
+export function RestTimer({
+  visible,
+  onClose,
+  onComplete,
   defaultDuration = 90,
   compact = false
 }: RestTimerProps) {
-  const { 
-    timeLeft, 
-    duration, 
-    isActive, 
-    startTimer, 
-    pauseTimer, 
-    resetTimer, 
-    adjustDuration, 
-    formatTime 
+  const {
+    timeLeft,
+    duration,
+    isActive,
+    startTimer,
+    pauseTimer,
+    resetTimer,
+    adjustDuration,
+    formatTime
   } = useRestTimer();
 
   React.useEffect(() => {
-    if (visible) {
-      console.log('RestTimer: Setting new duration from', duration, 'to', defaultDuration);
+    if (visible && defaultDuration > 0) {
       adjustDuration(defaultDuration);
-      // Always start the timer when the modal becomes visible
-      setTimeout(() => {
-        startTimer(defaultDuration);
-      }, 100);
     }
-  }, [visible, defaultDuration, duration, adjustDuration, startTimer]);
+  }, [visible, defaultDuration, adjustDuration]);
 
   React.useEffect(() => {
     if (timeLeft === 0 && isActive) {
@@ -68,11 +63,11 @@ export function RestTimer({
                 <X size={16} color={Colors.primary} />
               </TouchableOpacity>
             </View>
-            
+
             <Text style={styles.compactTimeDisplay}>
               {formatTime(timeLeft)}
             </Text>
-            
+
             <View style={styles.compactControls}>
               <TouchableOpacity
                 style={[styles.compactButton, styles.compactSkipButton]}
@@ -139,7 +134,7 @@ export function RestTimer({
                 >
                   <Text style={styles.actionButtonText}>Restart</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={[styles.actionButton, styles.skipButton]}
                   onPress={onClose}
@@ -249,7 +244,7 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.medium,
     color: Colors.primary,
   },
-  
+
   // Compact timer styles
   compactContainer: {
     position: 'absolute',

@@ -45,7 +45,9 @@ export function ExerciseSearchModal({
   }, [visible, exercises.length, loadExercises]);
 
   useEffect(() => {
-    console.log('showFilterModal changed to:', showFilterModal);
+    if (showFilterModal) {
+      setShowFilterModal(false);
+    }
   }, [showFilterModal]);
 
   // Extract unique filter values from exercises
@@ -82,7 +84,7 @@ export function ExerciseSearchModal({
       exercise.category.toLowerCase().includes(searchQuery.toLowerCase());
     // Multi-select force filter logic
     const matchesForce = forceFilters.length > 0
-      ? forceFilters.includes(exercise.force)
+      ? exercise.force && forceFilters.includes(exercise.force)
       : true;
     // Multi-select muscle filter logic
     const matchesMuscle = muscleFilters.length > 0
@@ -90,7 +92,7 @@ export function ExerciseSearchModal({
       : true;
     // Multi-select equipment filter logic
     const matchesEquipment = equipmentFilters.length > 0
-      ? equipmentFilters.includes(exercise.equipment)
+      ? exercise.equipment && equipmentFilters.includes(exercise.equipment)
       : true;
     return matchesQuery && matchesForce && matchesMuscle && matchesEquipment;
   });

@@ -18,9 +18,10 @@ interface ExerciseCardProps {
   isOpen?: boolean;
   onToggle?: () => void;
   onUpdateSets?: (sets: any[]) => void;
+  onLongPress?: () => void;
 }
 
-export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings, onDeleteExercise, onDeleteSet, isOpen = false, onToggle, onUpdateSets }: ExerciseCardProps) {
+export const ExerciseCard = React.memo(({ exercise, onLogSet, onAddSet, onRestTimerSettings, onDeleteExercise, onDeleteSet, isOpen = false, onToggle, onUpdateSets, onLongPress }: ExerciseCardProps) => {
   const { getPreviousSetData } = useWorkoutStore();
   const [showExerciseInfo, setShowExerciseInfo] = useState(false);
   const [isEditingSets, setIsEditingSets] = useState(false);
@@ -131,7 +132,6 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            console.log('Deleting set with ID:', setId);
             onDeleteSet?.(setId);
           }
         }
@@ -256,9 +256,39 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
 
     onLogSet(setData);
 
+    // Prefill next set with current values
+    prefillNextSet(setData);
+
     // Reset timer for time-based exercises
     if (exercise.exercise.tracking_type === 'time_only') {
       resetTimer();
+    }
+  };
+
+  const prefillNextSet = (currentSetData: any) => {
+    switch (exercise.exercise.tracking_type) {
+      case 'weight_reps':
+        setWeight(currentSetData.weight?.toString() || '135');
+        setReps(currentSetData.reps?.toString() || '8');
+        break;
+      case 'bodyweight_reps':
+        setReps(currentSetData.reps?.toString() || '8');
+        break;
+      case 'time_only':
+        const minutes = Math.floor(currentSetData.reps / 60);
+        const seconds = currentSetData.reps % 60;
+        setRawTimeInput(`${minutes}${seconds.toString().padStart(2, '0')}`);
+        break;
+      case 'cardio':
+      case 'distance_time':
+        setDistance(currentSetData.weight?.toString() || '0.0');
+        const timeMinutes = Math.floor(currentSetData.reps / 60);
+        const timeSeconds = currentSetData.reps % 60;
+        setRawTimeInput(`${timeMinutes}${timeSeconds.toString().padStart(2, '0')}`);
+        break;
+      default:
+        setWeight(currentSetData.weight?.toString() || '135');
+        setReps(currentSetData.reps?.toString() || '8');
     }
   };
 
@@ -272,7 +302,12 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
           text: 'Mark Done',
           style: 'default',
           onPress: () => {
-            onLogSet({ ...exercise.sets.find((set: any) => set.id === setId), completed: true, timestamp: new Date().toISOString() });
+            const setToMark = exercise.sets.find((set: any) => set.id === setId);
+            onLogSet({ ...setToMark, completed: true, timestamp: new Date().toISOString() });
+
+            // Prefill next set with the marked set's values
+            prefillNextSet(setToMark);
+
             // Start rest timer if it's a time-only exercise
             if (exercise.exercise.tracking_type === 'time_only') {
               adjustDuration(exercise.rest_time); // Set duration to rest time
@@ -286,10 +321,6 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
 
   // Update handleAddSet to call onAddSet, not onLogSet
   const handleAddSet = () => {
-    console.log('=== ADD SET START ===');
-    console.log('Input values:', { weight, reps, distance, rawTimeInput });
-    console.log('Exercise tracking type:', exercise.exercise.tracking_type);
-
     const nextSetNumber = (exercise.sets[exercise.sets.length - 1]?.set_number || 0) + 1;
     let newSet: any = {
       set_number: nextSetNumber,
@@ -317,16 +348,10 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
         break;
     }
 
-    console.log('New set object:', newSet);
-    console.log('Calling onAddSet...');
     onAddSet(newSet);
-    console.log('=== ADD SET END ===');
 
-    // Clear input fields
-    setWeight('');
-    setReps('');
-    setDistance('');
-    setRawTimeInput('');
+    // Prefill next set with current values instead of clearing
+    prefillNextSet(newSet);
   };
 
   React.useEffect(() => {
@@ -357,8 +382,6 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
   };
 
   const handleSaveEditedSets = () => {
-    // Log the sets being saved for debugging
-    console.log('Saving edited sets:', editedSets);
     // Batch update sets if possible
     if (onUpdateSets) {
       onUpdateSets(editedSets.map(set => ({ ...set, weight: Number(set.weight) || 0, reps: Number(set.reps) || 0, id: set.id })));
@@ -428,6 +451,8 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
                     onLogSet({ ...set, completed: false, timestamp: null });
                   } else {
                     onLogSet({ ...set, completed: true, timestamp: new Date().toISOString() });
+                    // Prefill next set with the completed set's values
+                    prefillNextSet(set);
                     if (exercise.exercise.tracking_type === 'time_only') {
                       adjustDuration(exercise.rest_time);
                       startTimer();
@@ -689,9 +714,10 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: 'transparent', borderRadius: 16 }}
+      style={{ backgroundColor: 'transparent', borderRadius: 16 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 150 : 200}
+      enabled={isOpen}
     >
       <View>
         <View
@@ -706,7 +732,14 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
             },
           ]}
         >
-          <TouchableOpacity onPress={onToggle} activeOpacity={0.85}>
+          <TouchableOpacity
+            onPress={onToggle}
+            onLongPress={onLongPress}
+            activeOpacity={0.85}
+            delayPressIn={200}
+            delayLongPress={500}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <View style={styles.exerciseHeader}>
               <View style={styles.exerciseHeaderLeft}>
                 <Text style={styles.exerciseName}>{exercise.exercise.name}</Text>
@@ -775,7 +808,7 @@ export function ExerciseCard({ exercise, onLogSet, onAddSet, onRestTimerSettings
       />
     </KeyboardAvoidingView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   exerciseHeader: {

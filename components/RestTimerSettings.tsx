@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Modal, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
   Switch,
   ScrollView
 } from 'react-native';
@@ -38,12 +38,12 @@ const REST_TIME_OPTIONS = [
   { value: 300, label: '5m', description: '5 minutes' },
 ];
 
-export function RestTimerSettings({ 
-  visible, 
-  onClose, 
-  exerciseId, 
-  currentRestTime, 
-  onUpdateRestTime 
+export function RestTimerSettings({
+  visible,
+  onClose,
+  exerciseId,
+  currentRestTime,
+  onUpdateRestTime
 }: RestTimerSettingsProps) {
   const [selectedTime, setSelectedTime] = useState(currentRestTime);
 
@@ -51,20 +51,17 @@ export function RestTimerSettings({
     setSelectedTime(currentRestTime);
   }, [currentRestTime, visible]);
 
-  const handleSave = () => {
-    console.log('=== REST TIMER SETTINGS SAVE ===');
-    console.log('exerciseId:', exerciseId);
-    console.log('selectedTime:', selectedTime);
-    
-    if (exerciseId) {
-      onUpdateRestTime(exerciseId, selectedTime);
-    } else {
-      console.log('No exerciseId provided, cannot save');
+  const handleSave = async () => {
+    if (!exerciseId) {
+      return;
     }
+
+    const time = selectedTime || 0;
+    await onUpdateRestTime(exerciseId, time);
+    onClose();
   };
 
   const handleTimeSelect = (time: number) => {
-    console.log('Time selected:', time);
     setSelectedTime(time);
   };
 
@@ -92,7 +89,7 @@ export function RestTimerSettings({
               <Timer size={20} color={Colors.accent} />
               <Text style={styles.sectionTitle}>Choose Rest Duration</Text>
             </View>
-            
+
             <Text style={styles.sectionDescription}>
               Select how long you want to rest between sets for this exercise.
             </Text>

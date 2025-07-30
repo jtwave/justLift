@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, ActivityIndicator, Animated, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -12,6 +12,7 @@ import { RestTimerSettings } from '@/components/RestTimerSettings';
 import { WorkoutSummaryModal } from '@/components/WorkoutSummaryModal';
 import { router } from 'expo-router';
 import { Plus, ArrowLeft, Trash2 } from 'lucide-react-native';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 60;
 
@@ -30,7 +31,8 @@ export default function ActiveWorkoutScreen() {
     removeExercise,
     loading,
     addWorkoutSet,
-    updateWorkoutSets
+    updateWorkoutSets,
+    reorderExercises
   } = useWorkoutStore();
 
   const { elapsedTime, formatTime, startTimer, resetTimer } = useWorkoutTimer();
@@ -47,10 +49,15 @@ export default function ActiveWorkoutScreen() {
 
   // State to manage which exercises are open/closed
   const [openExercises, setOpenExercises] = useState<string[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragEndTime, setDragEndTime] = useState(0);
 
   useEffect(() => {
-    loadCurrentWorkout();
-  }, [loadCurrentWorkout]);
+    // Only load if we don't have current workout data
+    if (!currentWorkout) {
+      loadCurrentWorkout();
+    }
+  }, []);
 
   useEffect(() => {
     if (currentWorkout) {
@@ -69,10 +76,8 @@ export default function ActiveWorkoutScreen() {
 
   const handleDeleteSet = async (setId: string) => {
     try {
-      console.log('handleDeleteSet called with setId:', setId);
       const { deleteWorkoutSet } = useWorkoutStore.getState();
       await deleteWorkoutSet(setId);
-      console.log('Set deleted successfully');
 
       // Reload current workout to refresh the UI
       await loadCurrentWorkout();
@@ -81,69 +86,36 @@ export default function ActiveWorkoutScreen() {
       Alert.alert('Error', 'Failed to delete set. Please try again.');
     }
   };
-  const handleLogSet = async (workoutExerciseId: string, setData: any) => {
-    console.log('=== HANDLE LOG SET START ===');
-    console.log('workoutExerciseId:', workoutExerciseId);
-    console.log('setData:', setData);
 
+  const handleLogSet = async (workoutExerciseId: string, setData: any) => {
     // Get current exercise state before logging
     const exerciseBeforeLog = currentWorkout?.exercises.find(ex => ex.id === workoutExerciseId);
-    console.log('Exercise BEFORE log set:', {
-      id: exerciseBeforeLog?.id,
-      name: exerciseBeforeLog?.exercise.name,
-      rest_time: exerciseBeforeLog?.rest_time,
-      is_active: exerciseBeforeLog?.is_active
-    });
 
     await logSet(workoutExerciseId, setData);
-    console.log('Set logged successfully');
 
     // Reload current workout to get the latest state
-    console.log('Reloading current workout...');
     await loadCurrentWorkout();
-    console.log('Current workout reloaded');
 
     // Get the fresh workout state and check if we should show rest timer
     const state = useWorkoutStore.getState();
-    console.log('Fresh workout state loaded');
 
     const exercise = state.currentWorkout?.exercises.find(ex => ex.id === workoutExerciseId);
-    console.log('Exercise AFTER reload:', {
-      id: exercise?.id,
-      name: exercise?.exercise.name,
-      rest_time: exercise?.rest_time,
-      is_active: exercise?.is_active
-    });
 
     // Only show rest timer if marking as completed and rest_time is greater than 0
     if (setData.completed && exercise && exercise.rest_time > 0) {
-      console.log('Showing rest timer with duration:', exercise.rest_time);
       setRestTimerDuration(exercise.rest_time);
       setShowRestTimer(true);
-    } else {
-      console.log('NOT showing rest timer. Exercise:', !!exercise, 'rest_time:', exercise?.rest_time);
     }
-
-    console.log('=== HANDLE LOG SET END ===');
   };
 
   // Update handleAddSet to use addWorkoutSet for adding a set, but do not set completed: true
   const handleAddSet = async (workoutExerciseId: string, setData: any) => {
-    console.log('=== HANDLE ADD SET START ===');
-    console.log('workoutExerciseId:', workoutExerciseId);
-    console.log('setData:', setData);
-
     // Use addWorkoutSet to add a new set (not completed)
     const { addWorkoutSet } = useWorkoutStore.getState();
-    console.log('Calling addWorkoutSet...');
     await addWorkoutSet(workoutExerciseId, setData);
-    console.log('addWorkoutSet completed');
 
     // Reload current workout to refresh the UI
-    console.log('Reloading current workout...');
     await loadCurrentWorkout();
-    console.log('Current workout reloaded');
-    console.log('=== HANDLE ADD SET END ===');
   };
 
   const handleUpdateSets = async (workoutExerciseId: string, sets: any[]) => {
@@ -160,7 +132,6 @@ export default function ActiveWorkoutScreen() {
 
     const finishWorkoutAction = async () => {
       setIsFinishing(true);
-      console.log('Starting finish workout process...');
 
       // Store the current workout for the summary modal BEFORE finishing
       const workoutForSummary = {
@@ -172,11 +143,9 @@ export default function ActiveWorkoutScreen() {
         }))
       };
 
-      console.log('Workout summary data prepared:', workoutForSummary);
       setCompletedWorkout(workoutForSummary);
 
       // Show the summary modal immediately without finishing the workout yet
-      console.log('Showing summary modal...');
       setShowSummaryModal(true);
       setIsFinishing(false);
     };
@@ -221,32 +190,84 @@ export default function ActiveWorkoutScreen() {
   };
 
   const handleUpdateRestTime = async (exerciseId: string, restTime: number) => {
-    console.log('=== UPDATE REST TIME START ===');
-    console.log('exerciseId:', exerciseId);
-    console.log('new restTime:', restTime);
-
     await updateRestTime(exerciseId, restTime);
-    console.log('Rest time updated in database');
 
     // Reload current workout to get updated rest times
-    console.log('Reloading current workout after rest time update...');
     await loadCurrentWorkout();
-    console.log('Current workout reloaded after rest time update');
-
-    // Log the updated exercise state
-    const state = useWorkoutStore.getState();
-    const exercise = state.currentWorkout?.exercises.find(ex => ex.id === exerciseId);
-    console.log('Exercise after rest time update:', {
-      id: exercise?.id,
-      name: exercise?.exercise.name,
-      rest_time: exercise?.rest_time,
-      is_active: exercise?.is_active
-    });
 
     setShowRestTimerSettings(false);
     setSelectedExerciseForSettings(null);
-    console.log('=== UPDATE REST TIME END ===');
   };
+
+  const handleReorderExercises = async (data: any[]) => {
+    setIsDragging(false);
+    setDragEndTime(Date.now());
+    const exerciseIds = data.map(item => item.key);
+    await reorderExercises(exerciseIds);
+  };
+
+  // Memoize the data to prevent unnecessary re-renders
+  const draggableData = useMemo(() =>
+    currentWorkout?.exercises.map((exercise, index) => ({
+      key: exercise.id,
+      exercise,
+      index
+    })) || [], [currentWorkout?.exercises]
+  );
+
+  // Memoize the renderItem function
+  const renderExerciseItem = useCallback(({ item, drag, isActive }: RenderItemParams<any>) => {
+    const handleToggle = () => {
+      // Add a small delay after dragging to prevent conflicts
+      const timeSinceDragEnd = Date.now() - dragEndTime;
+      if (isDragging || timeSinceDragEnd < 300) {
+        return; // Prevent toggle if still dragging or recently dragged
+      }
+
+      setOpenExercises((prev) =>
+        prev.includes(item.exercise.id)
+          ? prev.filter((id) => id !== item.exercise.id)
+          : [...prev, item.exercise.id]
+      );
+    };
+
+    const handleLongPress = () => {
+      setIsDragging(true);
+      drag();
+    };
+
+    return (
+      <Animated.View style={[styles.draggableItem, isActive && styles.draggableItemActive]}>
+        <ExerciseCard
+          exercise={item.exercise}
+          isOpen={openExercises.includes(item.exercise.id)}
+          onToggle={handleToggle}
+          onLogSet={(setData) => handleLogSet(item.exercise.id, setData)}
+          onAddSet={(setData) => handleAddSet(item.exercise.id, setData)}
+          onRestTimerSettings={() => handleRestTimerSettings(item.exercise.id)}
+          onDeleteExercise={() => handleDeleteExercise(item.exercise.id)}
+          onDeleteSet={(setId) => handleDeleteSet(setId)}
+          onUpdateSets={(sets) => handleUpdateSets(item.exercise.id, sets)}
+          onLongPress={handleLongPress}
+        />
+      </Animated.View>
+    );
+  }, [openExercises, handleLogSet, handleAddSet, handleRestTimerSettings, handleDeleteExercise, handleDeleteSet, handleUpdateSets, isDragging, dragEndTime]);
+
+  // Memoize the ListFooterComponent
+  const ListFooterComponent = useCallback(() => (
+    <View style={{ paddingHorizontal: 20 }}>
+      <TouchableOpacity
+        style={[styles.addExerciseButton, { marginTop: 16 }]}
+        onPress={() => setShowExerciseModal(true)}
+        disabled={loading}
+      >
+        <Plus size={24} color={Colors.accent} />
+        <Text style={styles.addExerciseText}>Add Exercise</Text>
+      </TouchableOpacity>
+      <View style={styles.bottomPadding} />
+    </View>
+  ), [loading]);
 
   const handleBackPress = () => {
     router.back();
@@ -254,11 +275,8 @@ export default function ActiveWorkoutScreen() {
 
   const handleDeleteWorkout = () => {
     if (!currentWorkout) {
-      console.log('No current workout to delete');
       return;
     }
-
-    console.log('Attempting to delete workout:', currentWorkout.id);
 
     Alert.alert(
       'Delete Workout',
@@ -270,9 +288,7 @@ export default function ActiveWorkoutScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('User confirmed deletion, calling discardWorkout...');
               await discardWorkout(currentWorkout.id);
-              console.log('Workout deleted successfully');
               resetTimer();
 
               // Navigate back to the workout tab and refresh
@@ -289,8 +305,6 @@ export default function ActiveWorkoutScreen() {
 
   const handleWorkoutSaved = async () => {
     try {
-      console.log('Saving and finishing workout...');
-
       // Finish the workout immediately
       await finishWorkout();
       resetTimer();
@@ -309,7 +323,6 @@ export default function ActiveWorkoutScreen() {
   };
 
   const handleWorkoutDiscarded = () => {
-    console.log('Workout discarded, returning to home...');
     setShowSummaryModal(false);
     setCompletedWorkout(null);
     router.replace('/(tabs)');
@@ -328,10 +341,12 @@ export default function ActiveWorkoutScreen() {
           </View>
           <View style={styles.headerActions} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.accent} />
-          <Text style={styles.loadingText}>Loading your workout...</Text>
-        </View>
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={Colors.secondary} />
+            <Text style={styles.loadingText}>Loading workout...</Text>
+          </View>
+        )}
       </SafeAreaView>
     );
   }
@@ -387,37 +402,27 @@ export default function ActiveWorkoutScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT, paddingTop: 8, paddingHorizontal: 0 }}>
-        {currentWorkout.exercises.map((exercise) => (
-          <ExerciseCard
-            key={exercise.id}
-            exercise={exercise}
-            isOpen={openExercises.includes(exercise.id)}
-            onToggle={() => {
-              setOpenExercises((prev) =>
-                prev.includes(exercise.id)
-                  ? prev.filter((id) => id !== exercise.id)
-                  : [...prev, exercise.id]
-              );
-            }}
-            onLogSet={(setData) => handleLogSet(exercise.id, setData)}
-            onAddSet={(setData) => handleAddSet(exercise.id, setData)}
-            onRestTimerSettings={() => handleRestTimerSettings(exercise.id)}
-            onDeleteExercise={() => handleDeleteExercise(exercise.id)}
-            onDeleteSet={(setId) => handleDeleteSet(setId)}
-            onUpdateSets={(sets) => handleUpdateSets(exercise.id, sets)}
-          />
-        ))}
-        <TouchableOpacity
-          style={[styles.addExerciseButton, { marginTop: 16 }]}
-          onPress={() => setShowExerciseModal(true)}
-          disabled={loading}
-        >
-          <Plus size={24} color={Colors.accent} />
-          <Text style={styles.addExerciseText}>Add Exercise</Text>
-        </TouchableOpacity>
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <DraggableFlatList
+          data={draggableData}
+          onDragEnd={({ data }) => handleReorderExercises(data)}
+          onDragBegin={() => setIsDragging(true)}
+          keyExtractor={(item) => item.key}
+          renderItem={renderExerciseItem}
+          ListFooterComponent={ListFooterComponent}
+          contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT, paddingTop: 8, paddingHorizontal: 0 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          simultaneousHandlers={[]}
+          activationDistance={10}
+          dragHitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        />
+      </KeyboardAvoidingView>
 
       {/* Exercise Search Modal */}
       <ExerciseSearchModal
@@ -488,20 +493,22 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   deleteButton: {
     padding: 8,
   },
   elapsedTime: {
     fontSize: FontSizes.sectionHeader,
-    fontWeight: FontWeights.bold,
+    fontWeight: FontWeights.semibold,
     color: Colors.accent,
+    textAlign: 'center',
   },
   workoutName: {
-    fontSize: FontSizes.caption,
+    fontSize: FontSizes.body,
     color: Colors.secondary,
-    marginTop: 2,
+    textAlign: 'center',
+    marginTop: 4,
   },
   headerTitle: {
     fontSize: FontSizes.sectionHeader,
@@ -513,16 +520,18 @@ const styles = StyleSheet.create({
   },
   finishButton: {
     fontSize: FontSizes.body,
-    fontWeight: FontWeights.medium,
+    fontWeight: FontWeights.semibold,
     color: Colors.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.cardBackground,
   },
   finishButtonDisabled: {
     opacity: 0.5,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 16,
   },
   inactiveExercise: {
     backgroundColor: Colors.cardBackground,
@@ -543,14 +552,15 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   addExerciseButton: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 16,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginHorizontal: 20,
   },
   addExerciseText: {
     fontSize: FontSizes.body,
@@ -558,36 +568,36 @@ const styles = StyleSheet.create({
     color: Colors.accent,
   },
   bottomPadding: {
-    height: 24,
+    height: 20,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 48,
+    paddingHorizontal: 40,
+    gap: 24,
   },
   emptyStateTitle: {
-    fontSize: FontSizes.sectionHeader,
-    fontWeight: FontWeights.semibold,
+    fontSize: FontSizes.screenTitle,
+    fontWeight: FontWeights.bold,
     color: Colors.primary,
-    marginBottom: 8,
+    textAlign: 'center',
   },
   emptyStateText: {
     fontSize: FontSizes.body,
     color: Colors.secondary,
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 32,
   },
   startButton: {
     backgroundColor: Colors.accent,
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 16,
+    paddingVertical: 20,
     paddingHorizontal: 32,
   },
   startButtonText: {
     fontSize: FontSizes.body,
-    fontWeight: FontWeights.medium,
+    fontWeight: FontWeights.semibold,
     color: Colors.primary,
   },
   loadingContainer: {
@@ -599,5 +609,32 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: FontSizes.body,
     color: Colors.secondary,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 1000,
+  },
+  draggableItem: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+  },
+  draggableItemActive: {
+    opacity: 0.9,
+    transform: [{ scale: 1.02 }],
+    backgroundColor: Colors.accent,
+    borderRadius: 16,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
   },
 });

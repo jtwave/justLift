@@ -5,25 +5,51 @@ import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useRoutineStore } from '@/store/routineStore';
 import { useWorkoutStore } from '@/store/workoutStore';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { X, Plus, Minus, GripVertical } from 'lucide-react-native';
 import { ExerciseSearchModal } from '@/components/ExerciseSearchModal';
 
-export default function CreateRoutineScreen() {
+export default function EditRoutineScreen() {
+    const { id } = useLocalSearchParams<{ id: string }>();
     const [routineName, setRoutineName] = useState('');
     const [description, setDescription] = useState('');
     const [showExerciseModal, setShowExerciseModal] = useState(false);
     const [routineExerciseSets, setRoutineExerciseSets] = useState<any[]>([]);
     const [editingExercise, setEditingExercise] = useState<number | null>(null);
 
-    const { createRoutine, loading } = useRoutineStore();
+    const { routines, loadRoutines, updateRoutine, loading } = useRoutineStore();
     const { exercises, loadExercises } = useWorkoutStore();
 
+    // Load routine data when component mounts
     useEffect(() => {
         if (exercises.length === 0) {
             loadExercises();
         }
-    }, [exercises.length, loadExercises]);
+        if (routines.length === 0) {
+            loadRoutines();
+        }
+    }, [exercises.length, routines.length, loadExercises, loadRoutines]);
+
+    // Load routine data when routines are loaded
+    useEffect(() => {
+        if (id && routines.length > 0) {
+            const routine = routines.find(r => r.id === id);
+            if (routine) {
+                setRoutineName(routine.name);
+                setDescription(routine.description || '');
+
+                // Convert routine exercises to routineExerciseSets format
+                const exerciseSetsData = routine.exercises.map((re: any) => ({
+                    exerciseId: re.exercise_id,
+                    name: re.exercise.name,
+                    category: re.exercise.category,
+                    sets: re.default_sets ? JSON.parse(re.default_sets) : []
+                }));
+
+                setRoutineExerciseSets(exerciseSetsData);
+            }
+        }
+    }, [id, routines]);
 
     const handleAddExercise = (exerciseId: string) => {
         const exercise = exercises.find(ex => ex.id === exerciseId);
@@ -51,7 +77,7 @@ export default function CreateRoutineScreen() {
         }
 
         try {
-            // Convert to the format expected by createRoutine
+            // Convert to the format expected by updateRoutine
             const exerciseConfigs = routineExerciseSets.map(ex => ({
                 exercise_id: ex.exerciseId,
                 sets: ex.sets ? ex.sets.map((set: any) => ({
@@ -61,12 +87,14 @@ export default function CreateRoutineScreen() {
                 rest_time: ex.rest_time || 0
             }));
 
-            await createRoutine(routineName.trim(), description.trim() || null, exerciseConfigs);
-            Alert.alert('Success', 'Routine created successfully!');
+            // Use the enhanced updateRoutine function that handles exercise changes
+            await updateRoutine(id as string, routineName.trim(), description.trim() || null, exerciseConfigs);
+
+            Alert.alert('Success', 'Routine updated successfully!');
             router.back();
         } catch (error) {
-            console.error('Error creating routine:', error);
-            Alert.alert('Error', 'Failed to create routine: ' + (error as Error).message);
+            console.error('Error updating routine:', error);
+            Alert.alert('Error', 'Failed to update routine: ' + (error as Error).message);
         }
     };
 
@@ -122,12 +150,6 @@ export default function CreateRoutineScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            {loading && (
-                <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color={Colors.secondary} />
-                    <Text style={styles.loadingText}>Creating routine...</Text>
-                </View>
-            )}
             <KeyboardAvoidingView
                 style={styles.keyboardAvoidingView}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -138,7 +160,7 @@ export default function CreateRoutineScreen() {
                     <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
                         <X size={24} color={Colors.primary} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Create Routine</Text>
+                    <Text style={styles.headerTitle}>Edit Routine</Text>
                     <TouchableOpacity
                         onPress={handleSave}
                         disabled={loading || !routineName.trim() || routineExerciseSets.length === 0}
@@ -147,6 +169,13 @@ export default function CreateRoutineScreen() {
                         <Text style={[styles.saveButtonText, (!routineName.trim() || routineExerciseSets.length === 0) && { color: Colors.secondary }]}>Save</Text>
                     </TouchableOpacity>
                 </View>
+
+                {loading && (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator size="large" color={Colors.secondary} />
+                        <Text style={styles.loadingText}>Updating routine...</Text>
+                    </View>
+                )}
 
                 <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                     {/* Routine Details */}

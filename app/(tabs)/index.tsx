@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl, Dimensions, FlatList, Platform, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl, Dimensions, FlatList, Platform, Alert, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useSocialStore } from '@/store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useWorkoutStore } from '@/store/workoutStore';
+import { useNotificationStore } from '@/store/notificationStore';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { router } from 'expo-router';
 import { Heart, MessageCircle, User, Clock, Dumbbell, Search, Play, Volume2, VolumeX, MoveHorizontal as MoreHorizontal, Trash2, Plus, Minus, X, GripVertical } from 'lucide-react-native';
@@ -449,25 +450,40 @@ const PostCard = ({ post, onLike, onDelete, currentUserId }: {
 };
 
 export default function HomeScreen() {
-  const {
-    feedPosts,
-    feedLoading,
-    loadFeed,
-    likePost,
-    unlikePost,
-    deleteWorkoutPost
-  } = useSocialStore();
-
   const { user } = useAuth();
+  const { feedPosts, feedLoading, loadFeed, likePost, unlikePost, deleteWorkoutPost } = useSocialStore();
+  const { exercises, loadExercises, currentWorkout } = useWorkoutStore();
+  const { checkForNewNotifications } = useNotificationStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
 
   useEffect(() => {
-    loadFeed();
-  }, [loadFeed]);
+    // Only refresh if we don't have data yet
+    if (feedPosts.length === 0) {
+      loadFeed();
+    }
+    // Only load exercises if we don't have them yet
+    if (exercises.length === 0) {
+      loadExercises();
+    }
+    checkForNewNotifications();
+
+    // Set layout ready after a brief delay to prevent janky transitions
+    const timer = setTimeout(() => {
+      setLayoutReady(true);
+    }, 25); // Reduced from 50ms to 25ms
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadFeed();
+    await Promise.all([
+      loadFeed(),
+      checkForNewNotifications()
+    ]);
     setRefreshing(false);
   };
 
@@ -488,6 +504,47 @@ export default function HomeScreen() {
       Alert.alert('Error', 'Failed to delete post. Please try again.');
     }
   };
+
+  const handleStartWorkout = () => {
+    if (currentWorkout) {
+      // Show confirmation dialog
+      Alert.alert(
+        'Active Workout Found',
+        'You already have an active workout. Would you like to delete the current workout and start a new one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete & Start New',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // Delete current workout
+                const { discardWorkout, startWorkout } = useWorkoutStore.getState();
+                await discardWorkout(currentWorkout.id);
+
+                // Start new workout
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                });
+                const workoutName = `Workout - ${timeString}`;
+
+                await startWorkout(workoutName);
+                router.push('/workout/active');
+              } catch (error) {
+                Alert.alert('Error', 'Failed to start new workout. Please try again.');
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      // No active workout, navigate to workout screen
+      router.push('/(tabs)/workout');
+    }
+  };
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -505,40 +562,52 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {feedPosts.length === 0 && !feedLoading ? (
-          <View style={styles.emptyState}>
-            <Dumbbell size={64} color={Colors.secondary} />
-            <Text style={styles.emptyStateTitle}>Welcome to Lift</Text>
-            <Text style={styles.emptyStateText}>
-              Follow other lifters to see their workouts in your feed, or start your first workout to share your progress!
-            </Text>
-            <TouchableOpacity
-              style={styles.startWorkoutButton}
-              onPress={() => router.push('/workout/active')}
-            >
-              <Text style={styles.startWorkoutButtonText}>Start Your First Workout</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          feedPosts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              onLike={handleLike}
-              onDelete={handleDeletePost}
-              currentUserId={user?.id || ''}
+      {layoutReady && (
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.secondary]}
+              tintColor={Colors.secondary}
             />
-          ))
-        )}
-      </ScrollView>
+          }
+        >
+          {feedLoading ? (
+            <View style={styles.loadingContainer}>
+            </View>
+          ) : feedPosts.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Dumbbell size={64} color={Colors.secondary} />
+              <Text style={styles.emptyStateTitle}>Welcome to Lift</Text>
+              <Text style={styles.emptyStateText}>
+                Follow other lifters to see their workouts in your feed, or start your first workout to share your progress!
+              </Text>
+              <TouchableOpacity
+                style={styles.startWorkoutButton}
+                onPress={handleStartWorkout}
+              >
+                <Text style={styles.startWorkoutButtonText}>
+                  {currentWorkout ? 'Start New Workout' : 'Start Your First Workout'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            feedPosts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                onLike={handleLike}
+                onDelete={handleDeletePost}
+                currentUserId={user?.id || ''}
+              />
+            ))
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -547,6 +616,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+    minHeight: '100%', // Ensure full height to prevent shifts
   },
   header: {
     flexDirection: 'row',
@@ -556,6 +626,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.divider,
+    backgroundColor: Colors.background, // Ensure background is set
   },
   headerTitle: {
     fontSize: FontSizes.screenTitle,
@@ -572,6 +643,17 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    backgroundColor: Colors.background, // Ensure background is set
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
   },
   emptyState: {
     flex: 1,

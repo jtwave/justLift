@@ -11,7 +11,7 @@ import { ArrowLeft, Play, CreditCard as Edit, Trash2 } from 'lucide-react-native
 export default function RoutineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { routines, loadRoutines, deleteRoutine } = useRoutineStore();
-  const { startWorkout } = useWorkoutStore();
+  const { startWorkout, currentWorkout } = useWorkoutStore();
 
   const [routine, setRoutine] = useState<any>(null);
 
@@ -31,16 +31,45 @@ export default function RoutineDetailScreen() {
   const handleStartWorkout = async () => {
     if (!routine) return;
 
+    // Check if there's already an active workout
+    if (currentWorkout) {
+      Alert.alert(
+        'Active Workout Found',
+        'You already have an active workout. Would you like to delete the current workout and start a new one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete & Start New',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // Delete current workout
+                const { discardWorkout } = useWorkoutStore.getState();
+                await discardWorkout(currentWorkout.id);
+
+                // Start new workout from routine
+                await startWorkout(routine.name, routine.id);
+                router.push('/workout/active');
+              } catch (error) {
+                Alert.alert('Error', 'Failed to start workout from routine. Please try again.');
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
+
     try {
       await startWorkout(routine.name, routine.id);
-      router.push('/workout');
+      router.push('/workout/active');
     } catch (error) {
       Alert.alert('Error', 'Failed to start workout from routine');
     }
   };
 
   const handleEdit = () => {
-    router.push(`/routines/${id}/edit`);
+    router.push(`/workout/routines/edit?id=${id}`);
   };
 
   const handleDelete = () => {

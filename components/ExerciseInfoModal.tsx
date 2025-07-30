@@ -295,7 +295,7 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
             <View style={styles.notesSection}>
               <Text style={styles.sectionTitle}>Your Notes</Text>
               {loadingNote ? (
-                <ActivityIndicator color={Colors.accent} style={{ marginVertical: 20 }} />
+                <ActivityIndicator color={Colors.secondary} style={{ marginVertical: 20 }} />
               ) : editing || !noteId ? (
                 <>
                   <TextInput
@@ -356,8 +356,8 @@ export function ExerciseInfoModal({ visible, onClose, exercise }: ExerciseInfoMo
                 <Text style={{ color: '#fff', position: 'absolute', top: insets.top + 16, left: 24, fontSize: 16 }}>{currentIndex} / {allSize}</Text>
               )}
               saveToLocalByLongPress={false}
-              renderHeader={() => null}
-              renderFooter={() => null}
+              renderHeader={() => <></>}
+              renderFooter={() => <></>}
             />
           )}
         </View>

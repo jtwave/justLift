@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Image, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Image, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
@@ -12,16 +12,16 @@ const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 60;
 
 export default function SearchScreen() {
   const { user } = useAuth();
-  const { 
-    searchResults, 
-    searchLoading, 
-    searchUsers, 
-    followUser, 
+  const {
+    searchResults,
+    searchLoading,
+    searchUsers,
+    followUser,
     unfollowUser,
     following,
     loadFollowing
   } = useSocialStore();
-  
+
   const [query, setQuery] = useState('');
   const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
 
@@ -73,7 +73,7 @@ export default function SearchScreen() {
   };
 
   const renderUserItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.userItem}
       onPress={() => {
         if (item.username) {
@@ -106,7 +106,7 @@ export default function SearchScreen() {
           )}
         </View>
       </View>
-      
+
       {/* Only show follow button if user has username and is not current user */}
       {item.username && item.id !== user?.id && (
         <TouchableOpacity
@@ -157,33 +157,40 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      <FlatList
-        data={searchResults}
-        renderItem={renderUserItem}
-        keyExtractor={(item) => item.id}
-        style={styles.userList}
-        contentContainerStyle={[styles.userListContent, { paddingBottom: TAB_BAR_HEIGHT }]}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          query.length > 0 ? (
-            <View style={styles.emptyState}>
-              <User size={48} color={Colors.secondary} />
-              <Text style={styles.emptyStateTitle}>No users found</Text>
-              <Text style={styles.emptyStateText}>
-                Try searching with a different username or name
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Search size={48} color={Colors.secondary} />
-              <Text style={styles.emptyStateTitle}>Search for friends</Text>
-              <Text style={styles.emptyStateText}>
-                Enter at least 2 characters to search for people by username, name, or email
-              </Text>
-            </View>
-          )
-        }
-      />
+      {searchLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.secondary} />
+          <Text style={styles.loadingText}>Searching...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={searchResults}
+          renderItem={renderUserItem}
+          keyExtractor={(item) => item.id}
+          style={styles.userList}
+          contentContainerStyle={[styles.userListContent, { paddingBottom: TAB_BAR_HEIGHT }]}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            query.length > 0 ? (
+              <View style={styles.emptyState}>
+                <User size={48} color={Colors.secondary} />
+                <Text style={styles.emptyStateTitle}>No users found</Text>
+                <Text style={styles.emptyStateText}>
+                  Try searching with a different username or name
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Search size={48} color={Colors.secondary} />
+                <Text style={styles.emptyStateTitle}>Search for friends</Text>
+                <Text style={styles.emptyStateText}>
+                  Enter at least 2 characters to search for people by username, name, or email
+                </Text>
+              </View>
+            )
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -328,5 +335,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: 24,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: {
+    marginLeft: 10,
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
   },
 });

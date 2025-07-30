@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -17,6 +17,11 @@ import { ThemeProvider } from '../components/ThemeProvider';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NotificationService } from '@/services/notificationService';
 import { useNotificationStore } from '@/store/notificationStore';
+import { useSocialStore } from '@/store/socialStore';
+import { useWorkoutStore } from '@/store/workoutStore';
+import { useRoutineStore } from '@/store/routineStore';
+import { useProgressStore } from '@/store/progressStore';
+import { AppState } from 'react-native';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,6 +48,50 @@ export default function RootLayout() {
 
   const { user, loading } = useAuth();
   const { loadPreferences } = useNotificationStore();
+  const [layoutReady, setLayoutReady] = useState(false);
+
+  // Preload all data for tabs when user is authenticated
+  useEffect(() => {
+    if (user) {
+      const preloadData = async () => {
+        try {
+          // Preload data for all tabs in parallel
+          await Promise.all([
+            // Home tab data
+            useSocialStore.getState().loadFeed(),
+            useSocialStore.getState().loadFollowing(user.id),
+            useSocialStore.getState().loadFollowers(user.id),
+
+            // Workout tab data
+            useWorkoutStore.getState().loadExercises(),
+            useWorkoutStore.getState().loadCurrentWorkout(),
+
+            // Routines data
+            useRoutineStore.getState().loadRoutines(),
+
+            // Stats data
+            useWorkoutStore.getState().loadWorkoutHistory(),
+            useProgressStore.getState().loadProgressPhotos(),
+
+            // Notifications data
+            useNotificationStore.getState().loadNotifications(),
+          ]);
+
+          // Add a small delay to ensure layout calculations are complete
+          setTimeout(() => {
+            setLayoutReady(true);
+          }, 50); // Reduced from 100ms to 50ms
+        } catch (error) {
+          console.error('Error preloading data:', error);
+          setLayoutReady(true); // Still set ready even if there's an error
+        }
+      };
+
+      preloadData();
+    } else {
+      setLayoutReady(true); // Set ready immediately if no user
+    }
+  }, [user]);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
@@ -57,7 +106,7 @@ export default function RootLayout() {
         // Request permissions
         const granted = await NotificationService.requestPermissions();
         if (!granted) {
-          console.log('Notification permissions not granted');
+          // Notification permissions not granted - silent fail
         }
 
         // Initialize notification listeners
@@ -80,11 +129,38 @@ export default function RootLayout() {
     };
   }, [user]);
 
+  // Set up periodic notification checking
+  useEffect(() => {
+    if (!user) return;
+
+    const { checkForNewNotifications } = useNotificationStore.getState();
+
+    // Check for new notifications immediately
+    checkForNewNotifications();
+
+    // Set up interval to check for new notifications every 30 seconds
+    const interval = setInterval(() => {
+      checkForNewNotifications();
+    }, 30000);
+
+    // Set up AppState listener to check notifications when app comes to foreground
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkForNewNotifications();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [user]);
+
   if (!fontsLoaded && !fontError) {
     return null;
   }
 
-  if (loading) {
+  if (loading || !layoutReady) {
     return null;
   }
 
@@ -106,6 +182,7 @@ export default function RootLayout() {
           <Stack.Screen name="+not-found" />
           <Stack.Screen name="workout/routines/exercise-config" options={{ presentation: 'modal' }} />
           <Stack.Screen name="workout/routines/save-routine-modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="workout/routines/edit" />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>
