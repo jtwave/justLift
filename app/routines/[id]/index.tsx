@@ -170,20 +170,43 @@ export default function RoutineDetailScreen() {
         {/* Exercises List */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Exercises</Text>
-          {routine.exercises.map((routineExercise: any, index: number) => (
-            <View key={routineExercise.id} style={styles.exerciseCard}>
-              <View style={styles.exerciseNumber}>
-                <Text style={styles.exerciseNumberText}>{index + 1}</Text>
+          {routine.exercises.map((routineExercise: any, index: number) => {
+            // Parse the default_sets to get sets and reps info
+            let setsInfo = '';
+            try {
+              if (routineExercise.default_sets) {
+                const defaultSets = JSON.parse(routineExercise.default_sets);
+                if (Array.isArray(defaultSets) && defaultSets.length > 0) {
+                  const firstSet = defaultSets[0];
+                  const totalSets = defaultSets.length;
+                  setsInfo = `${totalSets} sets × ${firstSet.reps || 0} reps`;
+                  if (firstSet.weight && firstSet.weight > 0) {
+                    setsInfo += ` @ ${firstSet.weight} lbs`;
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error parsing default_sets:', error);
+            }
+
+            return (
+              <View key={routineExercise.id} style={styles.exerciseCard}>
+                <View style={styles.exerciseNumber}>
+                  <Text style={styles.exerciseNumberText}>{index + 1}</Text>
+                </View>
+                <View style={styles.exerciseInfo}>
+                  <Text style={styles.exerciseName}>{routineExercise.exercise.name}</Text>
+                  <Text style={styles.exerciseCategory}>{routineExercise.exercise.category}</Text>
+                  {setsInfo ? (
+                    <Text style={styles.exerciseSets}>{setsInfo}</Text>
+                  ) : null}
+                  <Text style={styles.exerciseRest}>
+                    Rest: {routineExercise.default_rest_time === 0 ? 'Off' : `${Math.floor(routineExercise.default_rest_time / 60)}:${(routineExercise.default_rest_time % 60).toString().padStart(2, '0')}`}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.exerciseInfo}>
-                <Text style={styles.exerciseName}>{routineExercise.exercise.name}</Text>
-                <Text style={styles.exerciseCategory}>{routineExercise.exercise.category}</Text>
-                <Text style={styles.exerciseRest}>
-                  Rest: {Math.floor(routineExercise.default_rest_time / 60)}:{(routineExercise.default_rest_time % 60).toString().padStart(2, '0')}
-                </Text>
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -227,10 +250,11 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingVertical: 20,
   },
   routineInfo: {
     alignItems: 'center',
+    marginBottom: 8,
   },
   routineName: {
     fontSize: FontSizes.screenTitle,
@@ -249,17 +273,22 @@ const styles = StyleSheet.create({
   routineStats: {
     fontSize: FontSizes.body,
     color: Colors.accent,
-    fontWeight: FontWeights.medium,
+    fontWeight: FontWeights.semibold,
   },
   startButton: {
     backgroundColor: Colors.accent,
-    borderRadius: 16,
+    borderRadius: 20,
     paddingVertical: 20,
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   startButtonText: {
     fontSize: FontSizes.body,
@@ -268,26 +297,36 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: FontSizes.sectionHeader,
-    fontWeight: FontWeights.semibold,
+    fontWeight: FontWeights.bold,
     color: Colors.primary,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   exerciseCard: {
     flexDirection: 'row',
     backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   exerciseNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   exerciseNumberText: {
     fontSize: FontSizes.body,
@@ -299,17 +338,25 @@ const styles = StyleSheet.create({
   },
   exerciseName: {
     fontSize: FontSizes.body,
-    fontWeight: FontWeights.medium,
+    fontWeight: FontWeights.semibold,
     color: Colors.primary,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   exerciseCategory: {
     fontSize: FontSizes.caption,
     color: Colors.secondary,
-    marginBottom: 2,
+    marginBottom: 4,
+    textTransform: 'capitalize',
+  },
+  exerciseSets: {
+    fontSize: FontSizes.caption,
+    color: Colors.accent,
+    marginBottom: 4,
+    fontWeight: FontWeights.medium,
   },
   exerciseRest: {
     fontSize: FontSizes.caption,
-    color: Colors.accent,
+    color: Colors.secondary,
+    fontWeight: FontWeights.medium,
   },
 });
