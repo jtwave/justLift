@@ -31,11 +31,22 @@ export function RestTimer({
     formatTime
   } = useRestTimer();
 
+  const hasStartedRef = React.useRef(false);
+
   React.useEffect(() => {
-    if (visible && defaultDuration > 0) {
+    if (visible && defaultDuration > 0 && !hasStartedRef.current) {
       adjustDuration(defaultDuration);
+      // Auto-start the timer when modal opens
+      startTimer(defaultDuration);
+      hasStartedRef.current = true;
     }
-  }, [visible, defaultDuration, adjustDuration]);
+  }, [visible, defaultDuration, adjustDuration, startTimer]);
+
+  React.useEffect(() => {
+    if (!visible) {
+      hasStartedRef.current = false;
+    }
+  }, [visible]);
 
   React.useEffect(() => {
     if (timeLeft === 0 && isActive) {

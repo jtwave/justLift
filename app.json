@@ -2,7 +2,7 @@
   "expo": {
     "name": "LiftBuddies",
     "slug": "bolt-expo-nativewind",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
@@ -11,15 +11,21 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.jtwave.liftbuddies",
-      "buildNumber": "1.0.2",
+      "buildNumber": "1.0.3",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app uses the camera to allow users to take and upload profile or progress photos.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to let you upload workout photos."
+      },
+      "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
       }
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "NOTIFICATIONS"
       ]

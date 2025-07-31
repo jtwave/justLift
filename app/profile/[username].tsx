@@ -300,7 +300,7 @@ export default function UserProfileScreen() {
             const { count: followersCount } = await supabase
                 .from('follows')
                 .select('*', { count: 'exact', head: true })
-                .eq('followed_id', profileData.id);
+                .eq('following_id', profileData.id);
 
             const { count: followingCount } = await supabase
                 .from('follows')
@@ -325,7 +325,7 @@ export default function UserProfileScreen() {
                 .from('follows')
                 .select('*')
                 .eq('follower_id', user.id)
-                .eq('followed_id', profile?.id)
+                .eq('following_id', profile?.id)
                 .single();
 
             if (error && error.code !== 'PGRST116') {
@@ -349,29 +349,31 @@ export default function UserProfileScreen() {
                     .from('follows')
                     .delete()
                     .eq('follower_id', user.id)
-                    .eq('followed_id', profile.id);
+                    .eq('following_id', profile.id);
 
                 if (error) throw error;
 
                 setIsFollowing(false);
-                setFollowersCount(prev => Math.max(0, prev - 1));
+                // Reload profile to get updated counts from database
+                await loadUserProfile();
             } else {
                 // Follow
                 const { error } = await supabase
                     .from('follows')
                     .insert({
                         follower_id: user.id,
-                        followed_id: profile.id
+                        following_id: profile.id
                     });
 
                 if (error) throw error;
 
                 setIsFollowing(true);
-                setFollowersCount(prev => prev + 1);
+                // Reload profile to get updated counts from database
+                await loadUserProfile();
             }
         } catch (error) {
             console.error('Error toggling follow:', error);
-            Alert.alert('Error', 'Failed to update follow status');
+            Alert.alert('Error', `Failed to update follow status: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     };
 
