@@ -221,10 +221,18 @@ export default function UserProfileScreen() {
 
     useEffect(() => {
         if (username) {
+            // Reset follow state when navigating to different profile
+            setIsFollowing(false);
             loadUserProfile();
-            checkFollowStatus();
         }
     }, [username]);
+
+    // Check follow status after profile is loaded
+    useEffect(() => {
+        if (profile && !isOwnProfile) {
+            checkFollowStatus();
+        }
+    }, [profile, isOwnProfile]);
 
     const loadUserProfile = async () => {
         try {
@@ -318,14 +326,14 @@ export default function UserProfileScreen() {
     };
 
     const checkFollowStatus = async () => {
-        if (!user || isOwnProfile) return;
+        if (!user || !profile || isOwnProfile) return;
 
         try {
             const { data, error } = await supabase
                 .from('follows')
                 .select('*')
                 .eq('follower_id', user.id)
-                .eq('following_id', profile?.id)
+                .eq('following_id', profile.id)
                 .single();
 
             if (error && error.code !== 'PGRST116') {

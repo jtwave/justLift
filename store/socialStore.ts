@@ -60,6 +60,7 @@ interface SocialStore {
   createWorkoutPostWithMedia: (workoutId: string, caption?: string, mediaUrl?: string, mediaType?: 'photo' | 'video', isPublic?: boolean) => Promise<void>;
   loadPostComments: (postId: string) => Promise<any[]>;
   loadWorkoutPost: (workoutId: string) => Promise<any>;
+  loadPostWithLikeStatus: (postId: string) => Promise<any>;
   deleteWorkoutPost: (postId: string) => Promise<void>;
 }
 
@@ -333,6 +334,20 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) return;
 
+      // First check if the like already exists
+      const { data: existingLike } = await supabase
+        .from('workout_likes')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', user.user.id)
+        .limit(1);
+
+      // If like already exists, don't try to insert again
+      if (existingLike && existingLike.length > 0) {
+        console.log('Post already liked by user');
+        return;
+      }
+
       const { error } = await supabase
         .from('workout_likes')
         .insert({
@@ -340,7 +355,14 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
           user_id: user.user.id
         });
 
-      if (error) throw error;
+      if (error) {
+        // Handle duplicate key constraint gracefully
+        if (error.code === '23505') {
+          console.log('Like already exists (race condition handled)');
+          return;
+        }
+        throw error;
+      }
 
       // Update local state
       set({
@@ -354,6 +376,7 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
       // Database trigger will handle notification automatically
     } catch (error) {
       console.error('Error liking post:', error);
+      throw error;
     }
   },
 
@@ -542,6 +565,59 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
     } catch (error) {
       console.error('Error loading workout post:', error);
       return null;
+    }
+  },
+
+  loadPostWithLikeStatus: async (postId: string) => {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) return null;
+
+      // Load the post with full data
+      const { data: postData, error: postError } = await supabase
+        .from('workout_posts')
+        .select(`
+          *,
+          user:profiles(*),
+          workout:workouts(
+            id,
+            name,
+            start_time,
+            end_time,
+            workout_exercises(
+              exercise:exercises(name, category),
+              workout_sets(weight, reps, completed)
+            )
+          )
+        `)
+        .eq('id', postId)
+        .single();
+
+      if (postError) throw postError;
+
+      // Check if current user liked this post
+      const { data: likeData } = await supabase
+        .from('workout_likes')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', user.user.id)
+        .limit(1);
+
+      return {
+        ...postData,
+        workout: {
+          ...postData.workout,
+          exercises: postData.workout.workout_exercises.map((we: any) => ({
+            exercise_id: we.exercise_id,
+            exercise: we.exercise,
+            sets: we.workout_sets
+          }))
+        },
+        is_liked: likeData && likeData.length > 0
+      };
+    } catch (error) {
+      console.error('Error loading post with like status:', error);
+      throw error;
     }
   },
 

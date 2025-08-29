@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 export default function CommentsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { likePost, unlikePost, feedPosts, set: setFeedPosts } = useSocialStore();
+  const { likePost, unlikePost, feedPosts } = useSocialStore();
   const scrollViewRef = useRef<ScrollView>(null);
 
   const [post, setPost] = useState<any>(null);
@@ -31,50 +31,58 @@ export default function CommentsScreen() {
     try {
       setLoading(true);
 
-      // Load the post
-      const { data: postData, error: postError } = await supabase
-        .from('workout_posts')
-        .select(`
-          *,
-          user:profiles(*),
-          workout:workouts(
-            id,
-            name,
-            start_time,
-            end_time,
-            workout_exercises(
-              exercise:exercises(name, category),
-              workout_sets(weight, reps, completed)
+      // First check if post exists in the feed (for consistent state)
+      const feedPost = feedPosts.find(p => p.id === id);
+
+      if (feedPost) {
+        // Use the feed post data which already has correct like state
+        setPost(feedPost);
+      } else {
+        // Load from database if not in feed
+        const { data: postData, error: postError } = await supabase
+          .from('workout_posts')
+          .select(`
+            *,
+            user:profiles(*),
+            workout:workouts(
+              id,
+              name,
+              start_time,
+              end_time,
+              workout_exercises(
+                exercise:exercises(name, category),
+                workout_sets(weight, reps, completed)
+              )
             )
-          )
-        `)
-        .eq('id', id)
-        .single();
+          `)
+          .eq('id', id)
+          .single();
 
-      if (postError) throw postError;
+        if (postError) throw postError;
 
-      // Check if current user liked this post
-      const { data: likeData } = await supabase
-        .from('workout_likes')
-        .select('id')
-        .eq('post_id', id)
-        .eq('user_id', user?.id || '')
-        .limit(1);
+        // Check if current user liked this post
+        const { data: likeData } = await supabase
+          .from('workout_likes')
+          .select('id')
+          .eq('post_id', id)
+          .eq('user_id', user?.id || '')
+          .limit(1);
 
-      const formattedPost = {
-        ...postData,
-        workout: {
-          ...postData.workout,
-          exercises: postData.workout.workout_exercises.map((we: any) => ({
-            exercise_id: we.exercise_id, // <-- add this line
-            exercise: we.exercise,
-            sets: we.workout_sets
-          }))
-        },
-        is_liked: likeData && likeData.length > 0
-      };
+        const formattedPost = {
+          ...postData,
+          workout: {
+            ...postData.workout,
+            exercises: postData.workout.workout_exercises.map((we: any) => ({
+              exercise_id: we.exercise_id,
+              exercise: we.exercise,
+              sets: we.workout_sets
+            }))
+          },
+          is_liked: likeData && likeData.length > 0
+        };
 
-      setPost(formattedPost);
+        setPost(formattedPost);
+      }
 
       // Load comments
       const { data: commentsData, error: commentsError } = await supabase
@@ -122,14 +130,14 @@ export default function CommentsScreen() {
 
       // Update post comment count locally
       if (post) {
-        setPost(prev => ({
+        setPost((prev: any) => ({
           ...prev,
           comments_count: prev.comments_count + 1
         }));
       }
       // Update comment count in feedPosts (global store)
-      useSocialStore.setState((state: any) => ({
-        feedPosts: state.feedPosts.map((p: any) =>
+      useSocialStore.setState((state) => ({
+        feedPosts: state.feedPosts.map((p) =>
           p.id === id ? { ...p, comments_count: p.comments_count + 1 } : p
         )
       }));
@@ -149,20 +157,40 @@ export default function CommentsScreen() {
   const handleLike = async () => {
     if (!post) return;
 
-    if (post.is_liked) {
-      await unlikePost(post.id);
-      setPost(prev => ({
-        ...prev,
-        is_liked: false,
-        likes_count: prev.likes_count - 1
-      }));
-    } else {
-      await likePost(post.id);
-      setPost(prev => ({
-        ...prev,
-        is_liked: true,
-        likes_count: prev.likes_count + 1
-      }));
+    try {
+      if (post.is_liked) {
+        await unlikePost(post.id);
+        setPost((prev: any) => ({
+          ...prev,
+          is_liked: false,
+          likes_count: prev.likes_count - 1
+        }));
+
+        // Also update the feed state to keep it in sync
+        useSocialStore.setState((state: any) => ({
+          feedPosts: state.feedPosts.map((p: any) =>
+            p.id === post.id ? { ...p, is_liked: false, likes_count: p.likes_count - 1 } : p
+          )
+        }));
+      } else {
+        await likePost(post.id);
+        setPost((prev: any) => ({
+          ...prev,
+          is_liked: true,
+          likes_count: prev.likes_count + 1
+        }));
+
+        // Also update the feed state to keep it in sync
+        useSocialStore.setState((state: any) => ({
+          feedPosts: state.feedPosts.map((p: any) =>
+            p.id === post.id ? { ...p, is_liked: true, likes_count: p.likes_count + 1 } : p
+          )
+        }));
+      }
+    } catch (error) {
+      console.error('Error handling like in comments:', error);
+      // Reload the post to get the correct state
+      loadPostAndComments();
     }
   };
 

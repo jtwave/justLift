@@ -44,11 +44,7 @@ export function ExerciseSearchModal({
     }
   }, [visible, exercises.length, loadExercises]);
 
-  useEffect(() => {
-    if (showFilterModal) {
-      setShowFilterModal(false);
-    }
-  }, [showFilterModal]);
+  // Removed problematic useEffect that was auto-closing the filter modal
 
   // Extract unique filter values from exercises
   const forceOptions = React.useMemo(() => {
