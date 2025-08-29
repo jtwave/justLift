@@ -6,7 +6,7 @@ import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useWorkoutStore } from '@/store/workoutStore';
 import { useProgressStore } from '@/store/progressStore';
-import { BarChart3, Camera, Images as ImagesIcon, ChevronRight, Search } from 'lucide-react-native';
+import { BarChart3, Camera, Images as ImagesIcon, ChevronRight, Search, Activity, TrendingUp, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';
 import BodyMap from '@/components/BodyMap';
 
@@ -376,8 +376,14 @@ export default function StatsScreen() {
                         </View>
                     ) : (
                         <>
-                            {/* Swipeable Tabs for Muscle Groups */}
-                            <View style={[styles.section, { marginBottom: 0 }]}>
+                            {/* Muscle Groups Analysis */}
+                            <View style={styles.enhancedSection}>
+                                <View style={styles.sectionHeaderWithIcon}>
+                                    <View style={styles.sectionIconContainer}>
+                                        <Activity size={22} color={Colors.accent} />
+                                    </View>
+                                    <Text style={styles.enhancedSectionTitle}>Muscle Groups Analysis</Text>
+                                </View>
                                 <View style={{ flexDirection: 'row', borderRadius: 8, overflow: 'hidden', marginBottom: 12, backgroundColor: Colors.cardBackground }}>
                                     <TouchableOpacity
                                         style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'frequent' ? Colors.accent : 'transparent', alignItems: 'center' }}
@@ -417,8 +423,13 @@ export default function StatsScreen() {
                                 )}
                             </View>
                             {/* Exercise Progress Analysis */}
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Exercise Progress Analysis</Text>
+                            <View style={styles.enhancedSection}>
+                                <View style={styles.sectionHeaderWithIcon}>
+                                    <View style={styles.sectionIconContainer}>
+                                        <TrendingUp size={22} color={Colors.accent} />
+                                    </View>
+                                    <Text style={styles.enhancedSectionTitle}>Exercise Progress Analysis</Text>
+                                </View>
 
                                 {/* Exercise Selector */}
                                 <View style={styles.dropdownContainer}>
@@ -600,8 +611,13 @@ export default function StatsScreen() {
                                 )}
                             </View>
                             {/* Workout Frequency Chart */}
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Workout Frequency (Last 4 Weeks)</Text>
+                            <View style={styles.enhancedSection}>
+                                <View style={styles.sectionHeaderWithIcon}>
+                                    <View style={styles.sectionIconContainer}>
+                                        <Calendar size={22} color={Colors.accent} />
+                                    </View>
+                                    <Text style={styles.enhancedSectionTitle}>Workout Frequency (Last 4 Weeks)</Text>
+                                </View>
                                 <BarChart
                                     data={freqData}
                                     labels={freqLabels}
@@ -610,9 +626,12 @@ export default function StatsScreen() {
                                 />
                             </View>
                             {/* Progress Photos */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeaderRow}>
-                                    <Text style={styles.sectionTitle}>Body Progress Photos</Text>
+                            <View style={styles.enhancedSection}>
+                                <View style={styles.sectionHeaderWithIcon}>
+                                    <View style={styles.sectionIconContainer}>
+                                        <ImagesIcon size={22} color={Colors.accent} />
+                                    </View>
+                                    <Text style={styles.enhancedSectionTitle}>Body Progress Photos</Text>
                                     <TouchableOpacity onPress={() => router.push('/profile/photos')}>
                                         <Text style={styles.seeAllText}>See All</Text>
                                     </TouchableOpacity>
@@ -1038,6 +1057,38 @@ const styles = StyleSheet.create({
     },
     section: {
         marginBottom: 32,
+    },
+    enhancedSection: {
+        backgroundColor: Colors.cardBackground,
+        borderRadius: 8,
+        marginHorizontal: 2,
+        marginBottom: 20,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    sectionHeaderWithIcon: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 18,
+    },
+    sectionIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: Colors.accent + '15',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 14,
+    },
+    enhancedSectionTitle: {
+        fontSize: FontSizes.sectionHeader,
+        fontWeight: FontWeights.bold,
+        color: Colors.primary,
+        flex: 1,
     },
     sectionTitle: {
         fontSize: FontSizes.sectionHeader,
