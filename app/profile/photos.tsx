@@ -18,8 +18,7 @@ export default function ProgressPhotosScreen() {
   const [weightModalVisible, setWeightModalVisible] = useState(false);
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
   const [pendingWeight, setPendingWeight] = useState<string>('');
-  const [compareModalVisible, setCompareModalVisible] = useState(false);
-  const [comparePhotos, setComparePhotos] = useState<any[]>([]);
+
 
   useEffect(() => {
     loadProgressPhotos();
@@ -95,15 +94,9 @@ export default function ProgressPhotosScreen() {
       } else if (selectedPhotos.length < 2) {
         setSelectedPhotos([...selectedPhotos, photoId]);
       }
-      // Open compare modal if two selected
-      if (selectedPhotos.length === 1 && !selectedPhotos.includes(photoId)) {
-        const selected = [...selectedPhotos, photoId];
-        const photos = progressPhotos.filter(p => selected.includes(p.id));
-        setComparePhotos(photos);
-        setCompareModalVisible(true);
-      }
+      // Note: Removed automatic compare modal - user must click "View Comparison" button
     } else {
-      // Open full screen view
+      // Open single photo screen
       router.push(`/profile/photos/${photoId}`);
     }
   };
@@ -132,7 +125,7 @@ export default function ProgressPhotosScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={Colors.primary} />
@@ -256,33 +249,7 @@ export default function ProgressPhotosScreen() {
         </View>
       </Modal>
 
-      {/* Compare Modal */}
-      <Modal
-        visible={compareModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCompareModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.compareModalContainer}>
-            <Text style={styles.compareModalTitle}>Compare Progress Photos</Text>
-            <View style={styles.comparePhotosRow}>
-              {comparePhotos.map((photo, idx) => (
-                <View key={photo.id} style={styles.comparePhotoCol}>
-                  <Image source={{ uri: photo.photo_url }} style={styles.comparePhoto} />
-                  <Text style={styles.comparePhotoDate}>{new Date(photo.created_at).toLocaleDateString()}</Text>
-                  {photo.weight && (
-                    <Text style={styles.comparePhotoWeight}>{photo.weight} lbs</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-            <TouchableOpacity style={styles.closeCompareButton} onPress={() => setCompareModalVisible(false)}>
-              <Text style={styles.closeCompareButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -297,7 +264,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.divider,
   },
@@ -499,56 +467,5 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.caption,
     fontWeight: FontWeights.bold,
   },
-  compareModalContainer: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 16,
-    padding: 24,
-    width: 340,
-    alignItems: 'center',
-  },
-  compareModalTitle: {
-    fontSize: FontSizes.sectionHeader,
-    fontWeight: FontWeights.semibold,
-    color: Colors.primary,
-    marginBottom: 16,
-  },
-  comparePhotosRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 16,
-  },
-  comparePhotoCol: {
-    flex: 1,
-    alignItems: 'center',
-    marginHorizontal: 8,
-  },
-  comparePhoto: {
-    width: 120,
-    height: 160,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  comparePhotoDate: {
-    fontSize: FontSizes.caption,
-    color: Colors.secondary,
-    marginBottom: 2,
-  },
-  comparePhotoWeight: {
-    fontSize: FontSizes.body,
-    color: Colors.accent,
-    fontWeight: FontWeights.bold,
-  },
-  closeCompareButton: {
-    marginTop: 12,
-    backgroundColor: Colors.accent,
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
-  closeCompareButtonText: {
-    color: Colors.primary,
-    fontWeight: FontWeights.medium,
-    fontSize: FontSizes.body,
-  },
+
 });

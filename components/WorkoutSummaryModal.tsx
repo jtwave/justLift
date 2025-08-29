@@ -19,7 +19,7 @@ import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useWorkoutStore } from '@/store/workoutStore';
 import { useSocialStore } from '@/store/socialStore';
 import { useProgressStore } from '@/store/progressStore';
-import { X, Share2, Camera, Save, Award, ChevronRight, Image as ImageIcon, Video } from 'lucide-react-native';
+import { X, Share2, Camera, Save, Award, ChevronRight, Image as ImageIcon, Video, Scale } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
@@ -61,6 +61,11 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
   const [mediaType, setMediaType] = useState<'photo' | 'video' | null>(null);
   const [visibility, setVisibility] = useState<'everyone' | 'friends' | 'private'>('everyone');
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
+
+  // Progress photo state
+  const [showProgressPhotoModal, setShowProgressPhotoModal] = useState(false);
+  const [progressWeight, setProgressWeight] = useState('');
+  const [progressNotes, setProgressNotes] = useState('');
 
   const { saveWorkoutAsRoutine } = useWorkoutStore();
   const { updateWorkoutDetails, discardWorkout, loadCurrentWorkout } = useWorkoutStore();
@@ -242,6 +247,83 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
     }
   }
 
+  // Helper to upload progress photo to Supabase Storage
+  async function uploadProgressPhoto(uri: string, userId: string): Promise<string | null> {
+    try {
+      const ext = uri.split('.').pop() || 'jpg';
+      const path = `progress/${userId}_${Date.now()}.${ext}`;
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileBuffer = decode(base64);
+      const { data, error } = await supabase.storage
+        .from('profile-photos')
+        .upload(path, fileBuffer, {
+          contentType: `image/${ext}`,
+          upsert: true,
+        });
+      if (error) {
+        console.error('Upload error:', error);
+        return null;
+      }
+      const { data: publicUrlData } = supabase.storage.from('profile-photos').getPublicUrl(path);
+      return publicUrlData.publicUrl;
+    } catch (err) {
+      console.error('Failed to upload progress photo:', err);
+      return null;
+    }
+  }
+
+  // Handle adding photo as progress photo
+  const handleAddProgressPhoto = () => {
+    if (!selectedMedia) {
+      Alert.alert('No Photo', 'Please select a photo first before adding it to progress photos.');
+      return;
+    }
+    setShowProgressPhotoModal(true);
+  };
+
+  // Handle progress photo save
+  const handleProgressPhotoSave = async () => {
+    if (!selectedMedia) return;
+
+    const weightValue = parseFloat(progressWeight);
+    if (isNaN(weightValue) || weightValue <= 0) {
+      Alert.alert('Invalid Weight', 'Please enter a valid weight greater than 0');
+      return;
+    }
+
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) {
+        Alert.alert('Error', 'User not authenticated');
+        return;
+      }
+
+      // Upload the photo to storage
+      const photoUrl = await uploadProgressPhoto(selectedMedia, user.user.id);
+      if (!photoUrl) {
+        Alert.alert('Error', 'Failed to upload photo');
+        return;
+      }
+
+      // Add to progress photos
+      await addProgressPhoto(photoUrl, progressNotes.trim(), weightValue);
+
+      // Reset progress photo state
+      setShowProgressPhotoModal(false);
+      setProgressWeight('');
+      setProgressNotes('');
+
+      Alert.alert(
+        'Success',
+        'Photo added to body progress photos!',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error adding progress photo:', error);
+      Alert.alert('Error', 'Failed to add progress photo');
+    }
+  };
+
   const handleSaveWorkout = async () => {
     try {
       // Update workout details first
@@ -261,10 +343,7 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
         uploadedMediaUrl = await uploadWorkoutPhoto(selectedMedia, currentUser.id);
       }
 
-      // Save the media as progress photo if it's a photo
-      if (uploadedMediaUrl && mediaType === 'photo') {
-        await addProgressPhoto(uploadedMediaUrl, workoutDescription);
-      }
+      // Note: Progress photos are now saved separately via the "Save as Body Progress Photo" option
 
       // Create or delete workout post based on visibility setting
       if (workout.id && visibility !== 'private') {
@@ -519,146 +598,225 @@ export function WorkoutSummaryModal({ visible, onSave, onDiscard, workout }: Wor
   }
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle={Platform.OS === 'ios' ? "pageSheet" : "fullScreen"}
-      onRequestClose={onDiscard}
-    >
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onDiscard} style={styles.closeButton}>
-            <X size={24} color={Colors.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Save Workout</Text>
-          <TouchableOpacity onPress={handleSaveWorkout} style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Save</Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Workout Title */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Workout title</Text>
-            <TextInput
-              style={styles.titleInput}
-              value={workoutTitle}
-              onChangeText={setWorkoutTitle}
-              placeholder="Enter workout title"
-              placeholderTextColor={Colors.secondary}
-            />
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? "pageSheet" : "fullScreen"}
+        onRequestClose={onDiscard}
+      >
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onDiscard} style={styles.closeButton}>
+              <X size={24} color={Colors.primary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Save Workout</Text>
+            <TouchableOpacity onPress={handleSaveWorkout} style={styles.saveButton}>
+              <Text style={styles.saveButtonText}>Save</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Stats Row */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Duration</Text>
-              <Text style={styles.statValue}>{duration}min</Text>
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Workout Title */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Workout title</Text>
+              <TextInput
+                style={styles.titleInput}
+                value={workoutTitle}
+                onChangeText={setWorkoutTitle}
+                placeholder="Enter workout title"
+                placeholderTextColor={Colors.secondary}
+              />
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Volume</Text>
-              <Text style={styles.statValue}>{Math.round(totalVolume)} lbs</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Sets</Text>
-              <Text style={styles.statValue}>{totalSets}</Text>
-            </View>
-          </View>
 
-          {/* Date/Time */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>When</Text>
-            <Text style={styles.dateText}>{formatDate(workout.start_time)}</Text>
-          </View>
+            {/* Stats Row */}
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Duration</Text>
+                <Text style={styles.statValue}>{duration}min</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Volume</Text>
+                <Text style={styles.statValue}>{Math.round(totalVolume)} lbs</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Sets</Text>
+                <Text style={styles.statValue}>{totalSets}</Text>
+              </View>
+            </View>
 
-          {/* Media Upload */}
-          <TouchableOpacity style={styles.mediaSection} onPress={handleAddMedia}>
-            <View style={styles.mediaContainer}>
-              {selectedMedia ? (
-                <View style={styles.selectedMediaContainer}>
-                  {mediaType === 'photo' ? (
-                    <Image source={{ uri: selectedMedia }} style={styles.selectedMedia} />
-                  ) : (
-                    <Image source={{ uri: selectedMedia }} style={styles.selectedMedia} />
-                  )}
+            {/* Date/Time */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>When</Text>
+              <Text style={styles.dateText}>{formatDate(workout.start_time)}</Text>
+            </View>
+
+            {/* Media Upload */}
+            <TouchableOpacity style={styles.mediaSection} onPress={handleAddMedia}>
+              <View style={styles.mediaContainer}>
+                {selectedMedia ? (
+                  <View style={styles.selectedMediaContainer}>
+                    {mediaType === 'photo' ? (
+                      <Image source={{ uri: selectedMedia }} style={styles.selectedMedia} />
+                    ) : (
+                      <Image source={{ uri: selectedMedia }} style={styles.selectedMedia} />
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.mediaPlaceholder}>
+                    <ImageIcon size={32} color={Colors.secondary} />
+                  </View>
+                )}
+                <Text style={styles.mediaText}>Add a photo</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Progress Photo Option */}
+            {selectedMedia && mediaType === 'photo' && (
+              <TouchableOpacity style={styles.progressPhotoOption} onPress={handleAddProgressPhoto}>
+                <View style={styles.progressPhotoContainer}>
+                  <Scale size={20} color={Colors.accent} />
+                  <Text style={styles.progressPhotoText}>Save as Body Progress Photo</Text>
+                  <ChevronRight size={16} color={Colors.secondary} />
                 </View>
-              ) : (
-                <View style={styles.mediaPlaceholder}>
-                  <ImageIcon size={32} color={Colors.secondary} />
+              </TouchableOpacity>
+            )}
+
+            {/* Progress Photo Form */}
+            {showProgressPhotoModal && selectedMedia && (
+              <View style={styles.progressPhotoForm}>
+                <Text style={styles.progressFormTitle}>Add to Body Progress Photos</Text>
+
+                {/* Photo Preview */}
+                <View style={styles.progressPhotoPreview}>
+                  <Image source={{ uri: selectedMedia }} style={styles.progressPhotoImage} />
                 </View>
-              )}
-              <Text style={styles.mediaText}>Add a photo</Text>
+
+                {/* Weight Input */}
+                <View style={styles.progressInputSection}>
+                  <Text style={styles.progressInputLabel}>Current Weight *</Text>
+                  <View style={styles.progressWeightContainer}>
+                    <Scale size={20} color={Colors.accent} />
+                    <TextInput
+                      style={styles.progressWeightInput}
+                      value={progressWeight}
+                      onChangeText={setProgressWeight}
+                      placeholder="0"
+                      placeholderTextColor={Colors.secondary}
+                      keyboardType="decimal-pad"
+                      returnKeyType="next"
+                    />
+                    <Text style={styles.progressWeightUnit}>lbs</Text>
+                  </View>
+                </View>
+
+                {/* Notes Input */}
+                <View style={styles.progressInputSection}>
+                  <Text style={styles.progressInputLabel}>Notes (Optional)</Text>
+                  <TextInput
+                    style={styles.progressNotesInput}
+                    value={progressNotes}
+                    onChangeText={setProgressNotes}
+                    placeholder="How are you feeling? Any notes about your progress..."
+                    placeholderTextColor={Colors.secondary}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.progressActionButtons}>
+                  <TouchableOpacity
+                    style={styles.progressCancelButton}
+                    onPress={() => {
+                      setShowProgressPhotoModal(false);
+                      setProgressWeight('');
+                      setProgressNotes('');
+                    }}
+                  >
+                    <Text style={styles.progressCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.progressSaveButton} onPress={handleProgressPhotoSave}>
+                    <Text style={styles.progressSaveText}>Save Progress Photo</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+
+
+            {/* Description */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Description</Text>
+              <TextInput
+                style={styles.descriptionInput}
+                value={workoutDescription}
+                onChangeText={setWorkoutDescription}
+                placeholder="How did your workout go? Leave some notes here..."
+                placeholderTextColor={Colors.secondary}
+                multiline
+                numberOfLines={4}
+              />
             </View>
-          </TouchableOpacity>
 
-          {/* Description */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Description</Text>
-            <TextInput
-              style={styles.descriptionInput}
-              value={workoutDescription}
-              onChangeText={setWorkoutDescription}
-              placeholder="How did your workout go? Leave some notes here..."
-              placeholderTextColor={Colors.secondary}
-              multiline
-              numberOfLines={4}
-            />
-          </View>
+            {/* Visibility */}
+            <TouchableOpacity style={styles.visibilitySection} onPress={() => setShowVisibilityModal(true)}>
+              <Text style={styles.sectionLabel}>Visibility</Text>
+              <View style={styles.visibilityRow}>
+                <View style={styles.visibilityInfo}>
+                  <Text style={styles.visibilityValue}>
+                    {getVisibilityText(visibility)}
+                  </Text>
+                  <Text style={styles.visibilityDescription}>
+                    {getVisibilityDescription(visibility)}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={Colors.secondary} />
+              </View>
+            </TouchableOpacity>
 
-          {/* Visibility */}
-          <TouchableOpacity style={styles.visibilitySection} onPress={() => setShowVisibilityModal(true)}>
-            <Text style={styles.sectionLabel}>Visibility</Text>
-            <View style={styles.visibilityRow}>
-              <View style={styles.visibilityInfo}>
-                <Text style={styles.visibilityValue}>
-                  {getVisibilityText(visibility)}
-                </Text>
-                <Text style={styles.visibilityDescription}>
-                  {getVisibilityDescription(visibility)}
+            {/* PR Badge */}
+            {prCount > 0 && (
+              <View style={styles.prSection}>
+                <Award size={20} color={Colors.warning} />
+                <Text style={styles.prText}>
+                  {prCount} Personal Record{prCount > 1 ? 's' : ''} achieved!
                 </Text>
               </View>
-              <ChevronRight size={20} color={Colors.secondary} />
-            </View>
-          </TouchableOpacity>
+            )}
 
-          {/* PR Badge */}
-          {prCount > 0 && (
-            <View style={styles.prSection}>
-              <Award size={20} color={Colors.warning} />
-              <Text style={styles.prText}>
-                {prCount} Personal Record{prCount > 1 ? 's' : ''} achieved!
-              </Text>
-            </View>
-          )}
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => setShowSaveRoutine(true)}
+              >
+                <Save size={20} color={Colors.accent} />
+                <Text style={styles.actionButtonText}>Save as Routine</Text>
+              </TouchableOpacity>
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => setShowSaveRoutine(true)}
-            >
-              <Save size={20} color={Colors.accent} />
-              <Text style={styles.actionButtonText}>Save as Routine</Text>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleShare}
+              >
+                <Share2 size={20} color={Colors.accent} />
+                <Text style={styles.actionButtonText}>Share Workout</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Discard Button */}
+            <TouchableOpacity style={styles.discardButton} onPress={handleDiscardWorkout}>
+              <Text style={styles.discardButtonText}>Discard Workout</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleShare}
-            >
-              <Share2 size={20} color={Colors.accent} />
-              <Text style={styles.actionButtonText}>Share Workout</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.bottomPadding} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
-          {/* Discard Button */}
-          <TouchableOpacity style={styles.discardButton} onPress={handleDiscardWorkout}>
-            <Text style={styles.discardButtonText}>Discard Workout</Text>
-          </TouchableOpacity>
 
-          <View style={styles.bottomPadding} />
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
+    </>
   );
 }
 
@@ -942,5 +1100,112 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.body,
     color: Colors.secondary,
     marginBottom: 4,
+  },
+  progressPhotoOption: {
+    marginTop: 16,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  progressPhotoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  progressPhotoText: {
+    fontSize: FontSizes.body,
+    fontWeight: FontWeights.medium,
+    color: Colors.accent,
+    flex: 1,
+    marginLeft: 12,
+  },
+  progressPhotoForm: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 16,
+  },
+  progressFormTitle: {
+    fontSize: FontSizes.sectionHeader,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primary,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  progressPhotoPreview: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  progressPhotoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+  },
+  progressInputSection: {
+    marginBottom: 16,
+  },
+  progressInputLabel: {
+    fontSize: FontSizes.body,
+    fontWeight: FontWeights.medium,
+    color: Colors.primary,
+    marginBottom: 8,
+  },
+  progressWeightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  progressWeightInput: {
+    flex: 1,
+    fontSize: FontSizes.sectionHeader,
+    fontWeight: FontWeights.medium,
+    color: Colors.primary,
+    marginLeft: 12,
+    textAlign: 'center',
+  },
+  progressWeightUnit: {
+    fontSize: FontSizes.body,
+    color: Colors.secondary,
+    fontWeight: FontWeights.medium,
+  },
+  progressNotesInput: {
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: FontSizes.body,
+    color: Colors.primary,
+    minHeight: 80,
+  },
+  progressActionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  progressCancelButton: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  progressCancelText: {
+    fontSize: FontSizes.body,
+    fontWeight: FontWeights.medium,
+    color: Colors.secondary,
+  },
+  progressSaveButton: {
+    flex: 2,
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  progressSaveText: {
+    fontSize: FontSizes.body,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primary,
   },
 });

@@ -102,16 +102,33 @@ export default function StatsScreen() {
         const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
         const recentWorkouts = workoutHistory.filter(w => now.getTime() - new Date(w.start_time).getTime() < THIRTY_DAYS);
         const counts: Record<string, number> = {};
+
+        // Helper function to validate muscle name
+        const isValidMuscle = (muscle: any): muscle is string => {
+            return typeof muscle === 'string' &&
+                muscle.trim().length > 0 &&
+                muscle !== '{}' &&
+                muscle !== 'null' &&
+                muscle !== 'undefined' &&
+                !muscle.includes('{') &&
+                !muscle.includes('}');
+        };
+
         for (const workout of recentWorkouts) {
             for (const ex of workout.exercises) {
                 const sets = ex.sets?.length || 0;
-                const primary = ex.exercise.primaryMuscles || [];
-                const secondary = ex.exercise.secondaryMuscles || [];
+                const primary = Array.isArray(ex.exercise.primaryMuscles) ? ex.exercise.primaryMuscles : [];
+                const secondary = Array.isArray(ex.exercise.secondaryMuscles) ? ex.exercise.secondaryMuscles : [];
+
                 for (const muscle of primary) {
-                    counts[muscle] = (counts[muscle] || 0) + sets;
+                    if (isValidMuscle(muscle)) {
+                        counts[muscle] = (counts[muscle] || 0) + sets;
+                    }
                 }
                 for (const muscle of secondary) {
-                    counts[muscle] = (counts[muscle] || 0) + Math.round(sets / 2); // secondary: half credit
+                    if (isValidMuscle(muscle)) {
+                        counts[muscle] = (counts[muscle] || 0) + Math.round(sets / 2); // secondary: half credit
+                    }
                 }
             }
         }
@@ -201,6 +218,17 @@ export default function StatsScreen() {
     // For 'Frequently Worked', show all muscle groups sorted by set count
     const frequentlyWorked = useMemo(() => {
         return Object.entries(muscleSetCounts)
+            .filter(([muscle, count]) => {
+                // Additional validation to ensure we only show valid muscle names
+                return typeof muscle === 'string' &&
+                    muscle.trim().length > 0 &&
+                    muscle !== '{}' &&
+                    muscle !== 'null' &&
+                    muscle !== 'undefined' &&
+                    !muscle.includes('{') &&
+                    !muscle.includes('}') &&
+                    count > 0;
+            })
             .sort((a, b) => b[1] - a[1])
             .map(([muscle, count]) => ({ muscle, count }));
     }, [muscleSetCounts]);
