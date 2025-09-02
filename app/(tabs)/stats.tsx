@@ -363,8 +363,8 @@ export default function StatsScreen() {
                         <RefreshControl
                             refreshing={refreshing}
                             onRefresh={onRefresh}
-                            colors={[Colors.accent]}
-                            tintColor={Colors.accent}
+                            colors={[Colors.secondary]}
+                            tintColor={Colors.secondary}
                         />
                     }
                 >

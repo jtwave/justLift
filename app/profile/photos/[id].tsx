@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Modal, ScrollView
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useProgressStore } from '@/store/progressStore';
-import { X, Edit3, Check, Calendar, Scale, FileText, Trash2 } from 'lucide-react-native';
+import { X, Edit3, Check, Calendar, Scale, FileText, Trash2, MoreHorizontal } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import Animated, { useSharedValue, useAnimatedStyle, useAnimatedGestureHandler, withSpring } from 'react-native-reanimated';
@@ -20,6 +20,7 @@ export default function SingleProgressPhotoScreen() {
     const [photo, setPhoto] = useState<any>(null);
     const [editingNotes, setEditingNotes] = useState(false);
     const [noteText, setNoteText] = useState('');
+    const [showActions, setShowActions] = useState(false);
 
     // Refs
     const scrollViewRef = useRef<ScrollView>(null);
@@ -216,9 +217,9 @@ export default function SingleProgressPhotoScreen() {
 
     if (!photo) {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
                         <X size={24} color={Colors.primary} />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Progress Photo</Text>
@@ -235,31 +236,55 @@ export default function SingleProgressPhotoScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-                    <X size={24} color={Colors.primary} />
+                <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+                    <X size={22} color={Colors.secondary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Progress Photo</Text>
-                <View style={styles.headerActions}>
+                <TouchableOpacity
+                    onPress={() => setShowActions(!showActions)}
+                    style={styles.headerButton}
+                >
+                    <MoreHorizontal size={22} color={Colors.secondary} />
+                </TouchableOpacity>
+            </View>
+
+            {/* Action Menu */}
+            {showActions && (
+                <View style={styles.actionMenu}>
                     <TouchableOpacity
-                        onPress={handleDeletePhoto}
-                        style={styles.deleteButton}
+                        onPress={() => {
+                            setShowActions(false);
+                            editingNotes ? handleSaveNotes() : handleEditNotes();
+                        }}
+                        style={styles.actionItem}
                     >
-                        <Trash2 size={20} color={Colors.error} />
+                        <View style={styles.actionIconContainer}>
+                            {editingNotes ? (
+                                <Check size={18} color={Colors.accent} />
+                            ) : (
+                                <Edit3 size={18} color={Colors.accent} />
+                            )}
+                        </View>
+                        <Text style={styles.actionText}>
+                            {editingNotes ? 'Save Notes' : 'Edit Notes'}
+                        </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={editingNotes ? handleSaveNotes : handleEditNotes}
-                        style={styles.editButton}
+                        onPress={() => {
+                            setShowActions(false);
+                            handleDeletePhoto();
+                        }}
+                        style={styles.actionItem}
                     >
-                        {editingNotes ? (
-                            <Check size={24} color={Colors.accent} />
-                        ) : (
-                            <Edit3 size={24} color={Colors.accent} />
-                        )}
+                        <View style={[styles.actionIconContainer, styles.deleteIconContainer]}>
+                            <Trash2 size={18} color={Colors.error} />
+                        </View>
+                        <Text style={[styles.actionText, styles.deleteActionText]}>Delete Photo</Text>
                     </TouchableOpacity>
                 </View>
-            </View>
+            )}
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -274,82 +299,111 @@ export default function SingleProgressPhotoScreen() {
                     automaticallyAdjustKeyboardInsets={true}
                 >
                     {/* Photo */}
-                    <View style={styles.imageContainer}>
-                        <TapGestureHandler
-                            numberOfTaps={2}
-                            onHandlerStateChange={doubleTapHandler}
-                        >
-                            <Animated.View style={styles.gestureContainer}>
-                                <PinchGestureHandler onGestureEvent={pinchHandler}>
-                                    <Animated.View style={styles.gestureContainer}>
-                                        <PanGestureHandler onGestureEvent={panHandler}>
-                                            <Animated.View style={[styles.gestureContainer, animatedStyle]}>
-                                                <Animated.Image
-                                                    source={{ uri: photo.photo_url }}
-                                                    style={styles.image}
-                                                    resizeMode="contain"
-                                                />
-                                            </Animated.View>
-                                        </PanGestureHandler>
-                                    </Animated.View>
-                                </PinchGestureHandler>
-                            </Animated.View>
-                        </TapGestureHandler>
+                    <View style={styles.photoSection}>
+                        <View style={styles.imageContainer}>
+                            <TapGestureHandler
+                                numberOfTaps={2}
+                                onHandlerStateChange={doubleTapHandler}
+                            >
+                                <Animated.View style={styles.gestureContainer}>
+                                    <PinchGestureHandler onGestureEvent={pinchHandler}>
+                                        <Animated.View style={styles.gestureContainer}>
+                                            <PanGestureHandler onGestureEvent={panHandler}>
+                                                <Animated.View style={[styles.gestureContainer, animatedStyle]}>
+                                                    <Animated.Image
+                                                        source={{ uri: photo.photo_url }}
+                                                        style={styles.image}
+                                                        resizeMode="cover"
+                                                    />
+                                                </Animated.View>
+                                            </PanGestureHandler>
+                                        </Animated.View>
+                                    </PinchGestureHandler>
+                                </Animated.View>
+                            </TapGestureHandler>
+                        </View>
+                        <Text style={styles.photoHint}>Double tap to zoom • Pinch to zoom • Drag when zoomed</Text>
                     </View>
 
                     {/* Photo Details */}
-                    <View style={styles.photoDetails}>
-                        <View style={styles.detailRow}>
-                            <Calendar size={20} color={Colors.accent} />
-                            <Text style={styles.detailLabel}>Date:</Text>
-                            <Text style={styles.detailValue}>
-                                {new Date(photo.created_at).toLocaleDateString()}
-                            </Text>
-                        </View>
-
-                        {photo.weight && (
-                            <View style={styles.detailRow}>
-                                <Scale size={20} color={Colors.accent} />
-                                <Text style={styles.detailLabel}>Weight:</Text>
-                                <Text style={styles.detailValue}>{photo.weight} lbs</Text>
+                    <View style={styles.detailsSection}>
+                        <View style={styles.detailCard}>
+                            <View style={styles.detailHeader}>
+                                <Calendar size={18} color={Colors.accent} />
+                                <Text style={styles.detailHeaderText}>Photo Details</Text>
                             </View>
-                        )}
 
-                        <View style={styles.detailRow}>
-                            <FileText size={20} color={Colors.accent} />
-                            <Text style={styles.detailLabel}>Notes:</Text>
+                            <View style={styles.detailContent}>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Date</Text>
+                                    <Text style={styles.detailValue}>
+                                        {new Date(photo.created_at).toLocaleDateString('en-US', {
+                                            weekday: 'short',
+                                            year: 'numeric',
+                                            month: 'short',
+                                            day: 'numeric'
+                                        })}
+                                    </Text>
+                                </View>
+
+                                {photo.weight && (
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>Weight</Text>
+                                        <Text style={styles.detailValue}>{photo.weight} lbs</Text>
+                                    </View>
+                                )}
+                            </View>
                         </View>
 
-                        {editingNotes ? (
-                            <TextInput
-                                ref={textInputRef}
-                                style={styles.notesInput}
-                                value={noteText}
-                                onChangeText={setNoteText}
-                                onFocus={() => {
-                                    // Scroll to show the text input when keyboard appears
-                                    setTimeout(() => {
-                                        if (scrollViewRef.current) {
-                                            scrollViewRef.current.scrollTo({
-                                                y: 400, // Scroll to specific position instead of end
-                                                animated: true
-                                            });
-                                        }
-                                    }, 10);
-                                }}
-                                placeholder="Add notes about your progress..."
-                                placeholderTextColor={Colors.secondary}
-                                multiline
-                                numberOfLines={4}
-                                textAlignVertical="top"
-                                blurOnSubmit={false}
-                                returnKeyType="done"
-                            />
-                        ) : (
-                            <Text style={styles.notesText}>
-                                {photo.notes || 'No notes added yet. Tap the edit icon to add notes.'}
-                            </Text>
-                        )}
+                        <View style={styles.detailCard}>
+                            <View style={styles.detailHeader}>
+                                <FileText size={18} color={Colors.accent} />
+                                <Text style={styles.detailHeaderText}>Notes</Text>
+                            </View>
+
+                            <View style={styles.detailContent}>
+                                {editingNotes ? (
+                                    <TextInput
+                                        ref={textInputRef}
+                                        style={styles.notesInput}
+                                        value={noteText}
+                                        onChangeText={setNoteText}
+                                        onFocus={() => {
+                                            setTimeout(() => {
+                                                if (scrollViewRef.current) {
+                                                    scrollViewRef.current.scrollTo({
+                                                        y: 500,
+                                                        animated: true
+                                                    });
+                                                }
+                                            }, 100);
+                                        }}
+                                        placeholder="Add notes about your progress..."
+                                        placeholderTextColor={Colors.secondary}
+                                        multiline
+                                        numberOfLines={4}
+                                        textAlignVertical="top"
+                                        blurOnSubmit={false}
+                                        returnKeyType="done"
+                                    />
+                                ) : (
+                                    <TouchableOpacity
+                                        style={styles.notesContainer}
+                                        onPress={() => {
+                                            setShowActions(false);
+                                            handleEditNotes();
+                                        }}
+                                    >
+                                        <Text style={styles.notesText}>
+                                            {photo.notes || 'Tap to add notes about your progress...'}
+                                        </Text>
+                                        {!photo.notes && (
+                                            <Text style={styles.notesHint}>Add notes</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -366,42 +420,67 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 24,
-        paddingVertical: 16,
-        backgroundColor: Colors.cardBackground,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.divider,
-    },
-    closeButton: {
-        padding: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
         backgroundColor: Colors.background,
+    },
+    headerButton: {
+        width: 40,
+        height: 40,
         borderRadius: 20,
-        borderWidth: 1,
-        borderColor: Colors.divider,
+        backgroundColor: Colors.cardBackground,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 2,
     },
     headerTitle: {
         fontSize: FontSizes.sectionHeader,
-        fontWeight: FontWeights.semibold,
+        fontWeight: FontWeights.bold,
         color: Colors.primary,
     },
-    headerActions: {
+    actionMenu: {
+        backgroundColor: Colors.cardBackground,
+        marginHorizontal: 20,
+        marginBottom: 10,
+        borderRadius: 16,
+        padding: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    actionItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
     },
-    deleteButton: {
-        padding: 8,
-        backgroundColor: Colors.background,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: Colors.error,
+    actionIconContainer: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: Colors.accent + '15',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
     },
-    editButton: {
-        padding: 8,
-        backgroundColor: Colors.background,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: Colors.accent,
+    deleteIconContainer: {
+        backgroundColor: Colors.error + '15',
+    },
+    actionText: {
+        fontSize: FontSizes.body,
+        fontWeight: FontWeights.medium,
+        color: Colors.primary,
+        flex: 1,
+    },
+    deleteActionText: {
+        color: Colors.error,
     },
     body: {
         flex: 1,
@@ -411,7 +490,11 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
-        paddingBottom: 100,
+        paddingBottom: 120,
+    },
+    photoSection: {
+        alignItems: 'center',
+        marginBottom: 20,
     },
     gestureContainer: {
         width: '100%',
@@ -420,67 +503,116 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     imageContainer: {
-        width: width - 40,
-        height: 450,
-        backgroundColor: Colors.background,
-        borderRadius: 20,
+        width: width - 32,
+        height: width - 32,
+        backgroundColor: Colors.cardBackground,
+        borderRadius: 24,
         overflow: 'hidden',
-        marginHorizontal: 20,
-        marginVertical: 10,
+        marginHorizontal: 16,
+        marginTop: 10,
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 8,
     },
     image: {
-        width: width - 40,
-        height: 450,
-        borderRadius: 20,
+        width: '100%',
+        height: '100%',
+        borderRadius: 24,
     },
-    photoDetails: {
+    photoHint: {
+        fontSize: FontSizes.caption,
+        color: Colors.secondary + '80',
+        textAlign: 'center',
+        marginTop: 12,
+        paddingHorizontal: 40,
+        lineHeight: 16,
+    },
+    detailsSection: {
+        paddingHorizontal: 16,
+        gap: 16,
+    },
+    detailCard: {
         backgroundColor: Colors.cardBackground,
-        margin: 24,
-        borderRadius: 16,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        elevation: 3,
+        overflow: 'hidden',
+    },
+    detailHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        backgroundColor: Colors.accent + '08',
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.divider + '30',
+    },
+    detailHeaderText: {
+        fontSize: FontSizes.body,
+        fontWeight: FontWeights.semibold,
+        color: Colors.primary,
+        marginLeft: 10,
+    },
+    detailContent: {
         padding: 20,
-        gap: 12,
     },
     detailRow: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        gap: 8,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.divider + '20',
+        marginBottom: 8,
     },
     detailLabel: {
         fontSize: FontSizes.body,
         color: Colors.secondary,
         fontWeight: FontWeights.medium,
-        minWidth: 60,
     },
     detailValue: {
         fontSize: FontSizes.body,
         color: Colors.primary,
-        fontWeight: FontWeights.medium,
-        flex: 1,
+        fontWeight: FontWeights.semibold,
+    },
+    notesContainer: {
+        minHeight: 80,
+        justifyContent: 'center',
     },
     notesInput: {
         backgroundColor: Colors.background,
-        borderRadius: 12,
+        borderRadius: 16,
         borderWidth: 2,
-        borderColor: Colors.accent,
+        borderColor: Colors.accent + '40',
         padding: 16,
         fontSize: FontSizes.body,
         color: Colors.primary,
-        minHeight: 120,
+        minHeight: 100,
         textAlignVertical: 'top',
-        marginTop: 8,
         shadowColor: Colors.accent,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+        elevation: 3,
     },
     notesText: {
         fontSize: FontSizes.body,
         color: Colors.primary,
-        lineHeight: 20,
+        lineHeight: 22,
+        minHeight: 20,
+    },
+    notesHint: {
+        fontSize: FontSizes.caption,
+        color: Colors.secondary + '60',
         marginTop: 8,
+        fontStyle: 'italic',
     },
     emptyState: {
         flex: 1,

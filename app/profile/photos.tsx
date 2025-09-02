@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Dimensions, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Dimensions, Modal, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useProgressStore } from '@/store/progressStore';
 import { router } from 'expo-router';
-import { ArrowLeft, Camera, Plus, Images as ImagesIcon } from 'lucide-react-native';
+import { ArrowLeft, Camera, Plus, Images as ImagesIcon, X, Calendar, Scale } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { TapGestureHandler, PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedGestureHandler, withSpring } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 72) / 3; // 3 photos per row with padding
@@ -19,10 +21,23 @@ export default function ProgressPhotosScreen() {
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
   const [pendingWeight, setPendingWeight] = useState<string>('');
 
+  // Side-by-side comparison modal state
+  const [showSideBySide, setShowSideBySide] = useState(false);
+
+  // Zoom state for each photo
+  const scale1 = useSharedValue(1);
+  const translateX1 = useSharedValue(0);
+  const translateY1 = useSharedValue(0);
+  const scale2 = useSharedValue(1);
+  const translateX2 = useSharedValue(0);
+  const translateY2 = useSharedValue(0);
+
 
   useEffect(() => {
     loadProgressPhotos();
   }, [loadProgressPhotos]);
+
+
 
   const handleTakePhoto = async () => {
     try {
@@ -106,11 +121,130 @@ export default function ProgressPhotosScreen() {
     setSelectedPhotos([]);
   };
 
+  // Handle side-by-side comparison
   const handleCompareView = () => {
     if (selectedPhotos.length === 2) {
-      router.push(`/profile/photos/compare?photos=${selectedPhotos.join(',')}`);
+      setShowSideBySide(true);
     }
   };
+
+  const handleCloseSideBySide = () => {
+    setShowSideBySide(false);
+    // Reset zoom states
+    scale1.value = withSpring(1);
+    translateX1.value = withSpring(0);
+    translateY1.value = withSpring(0);
+    scale2.value = withSpring(1);
+    translateX2.value = withSpring(0);
+    translateY2.value = withSpring(0);
+  };
+
+  // Create zoom handlers for each photo
+  const createZoomHandlers = (scale: any, translateX: any, translateY: any) => {
+    const pinchHandler = useAnimatedGestureHandler({
+      onStart: (_, context: any) => {
+        context.startScale = scale.value;
+        context.startTranslateX = translateX.value;
+        context.startTranslateY = translateY.value;
+      },
+      onActive: (event: any, context: any) => {
+        const newScale = Math.max(1, Math.min(3, context.startScale * event.scale));
+        scale.value = newScale;
+
+        // Calculate container dimensions for portrait mode
+        const containerWidth = width - 32;
+        const containerHeight = 300;
+
+        // Calculate image dimensions at new scale
+        const imageWidth = containerWidth * newScale;
+        const imageHeight = containerHeight * newScale;
+
+        // Calculate maximum translation bounds
+        const maxTranslateX = Math.max(0, (imageWidth - containerWidth) / 2);
+        const maxTranslateY = Math.max(0, (imageHeight - containerHeight) / 2);
+
+        if (newScale <= 1) {
+          // If zoomed out to 1x or less, center the image
+          translateX.value = withSpring(0);
+          translateY.value = withSpring(0);
+        } else {
+          // Constrain current translation to new boundaries
+          translateX.value = Math.max(-maxTranslateX, Math.min(maxTranslateX, translateX.value));
+          translateY.value = Math.max(-maxTranslateY, Math.min(maxTranslateY, translateY.value));
+        }
+      },
+      onEnd: () => {
+        if (scale.value <= 1) {
+          scale.value = withSpring(1);
+          translateX.value = withSpring(0);
+          translateY.value = withSpring(0);
+        }
+      },
+    });
+
+    const panHandler = useAnimatedGestureHandler({
+      onStart: (_, context: any) => {
+        context.startX = translateX.value;
+        context.startY = translateY.value;
+      },
+      onActive: (event: any, context: any) => {
+        if (scale.value > 1) {
+          // Calculate container dimensions for portrait mode
+          const containerWidth = width - 32;
+          const containerHeight = 300;
+
+          // Calculate image dimensions at current scale
+          const imageWidth = containerWidth * scale.value;
+          const imageHeight = containerHeight * scale.value;
+
+          // Calculate maximum translation bounds
+          const maxTranslateX = Math.max(0, (imageWidth - containerWidth) / 2);
+          const maxTranslateY = Math.max(0, (imageHeight - containerHeight) / 2);
+
+          // Constrain translation to image boundaries
+          translateX.value = Math.max(
+            -maxTranslateX,
+            Math.min(maxTranslateX, context.startX + event.translationX)
+          );
+          translateY.value = Math.max(
+            -maxTranslateY,
+            Math.min(maxTranslateY, context.startY + event.translationY)
+          );
+        }
+      },
+    });
+
+    const doubleTapHandler = (event: any) => {
+      if (event.nativeEvent.state === State.ACTIVE) {
+        if (scale.value > 1.2) {
+          // Zoom out to 1x and center smoothly
+          scale.value = withSpring(1);
+          translateX.value = withSpring(0);
+          translateY.value = withSpring(0);
+        } else {
+          // Zoom in to 2x and center
+          scale.value = withSpring(2);
+          translateX.value = withSpring(0);
+          translateY.value = withSpring(0);
+        }
+      }
+    };
+
+    const animatedStyle = useAnimatedStyle(() => {
+      return {
+        transform: [
+          { translateX: translateX.value },
+          { translateY: translateY.value },
+          { scale: scale.value },
+        ],
+      };
+    });
+
+    return { pinchHandler, panHandler, doubleTapHandler, animatedStyle };
+  };
+
+  const photo1Handlers = createZoomHandlers(scale1, translateX1, translateY1);
+  const photo2Handlers = createZoomHandlers(scale2, translateX2, translateY2);
 
   const showAddPhotoOptions = () => {
     Alert.alert(
@@ -249,6 +383,81 @@ export default function ProgressPhotosScreen() {
         </View>
       </Modal>
 
+      {/* Side-by-Side Comparison Modal */}
+      <Modal
+        visible={showSideBySide}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={handleCloseSideBySide}
+        statusBarTranslucent={false}
+        supportedOrientations={['portrait']}
+      >
+        <SafeAreaView style={styles.sideBySideContainer} edges={['top', 'left', 'right']}>
+          <View style={styles.sideBySideHeader}>
+            <TouchableOpacity onPress={handleCloseSideBySide} style={styles.closeButton}>
+              <X size={24} color={Colors.primary} />
+            </TouchableOpacity>
+            <Text style={styles.sideBySideTitle}>Photo Comparison</Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <View style={styles.comparisonContainer}>
+            {selectedPhotos.map((photoId, index) => {
+              const photo = progressPhotos.find(p => p.id === photoId);
+              if (!photo) return null;
+
+              const handlers = index === 0 ? photo1Handlers : photo2Handlers;
+
+              return (
+                <View key={photo.id} style={styles.comparisonPhotoContainer}>
+                  <TapGestureHandler
+                    numberOfTaps={2}
+                    onHandlerStateChange={handlers.doubleTapHandler}
+                  >
+                    <Animated.View style={styles.comparisonImageWrapper}>
+                      <PinchGestureHandler onGestureEvent={handlers.pinchHandler}>
+                        <Animated.View style={styles.gestureContainer}>
+                          <PanGestureHandler onGestureEvent={handlers.panHandler}>
+                            <Animated.View style={[styles.gestureContainer, handlers.animatedStyle]}>
+                              <Image
+                                source={{ uri: photo.photo_url }}
+                                style={styles.comparisonImage}
+                                resizeMode="cover"
+                              />
+                            </Animated.View>
+                          </PanGestureHandler>
+                        </Animated.View>
+                      </PinchGestureHandler>
+                      <View style={styles.photoOverlay}>
+                        <View style={styles.photoDateBadge}>
+                          <Text style={styles.photoDateBadgeText}>
+                            {new Date(photo.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </Text>
+                        </View>
+                        {photo.weight && (
+                          <View style={styles.photoWeightBadge}>
+                            <Text style={styles.photoWeightBadgeText}>{photo.weight} lbs</Text>
+                          </View>
+                        )}
+                      </View>
+                    </Animated.View>
+                  </TapGestureHandler>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.comparisonHint}>
+            <Text style={styles.comparisonHintText}>
+              Double tap to zoom • Pinch to zoom • Drag when zoomed
+            </Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -466,6 +675,112 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: FontSizes.caption,
     fontWeight: FontWeights.bold,
+  },
+  // Side-by-side comparison modal styles
+  sideBySideContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  sideBySideHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: Colors.cardBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  closeButton: {
+    padding: 8,
+    backgroundColor: Colors.background,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  sideBySideTitle: {
+    fontSize: FontSizes.sectionHeader,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primary,
+  },
+  comparisonContainer: {
+    flex: 1,
+    padding: 16,
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  comparisonPhotoContainer: {
+    flex: 1,
+    maxHeight: '45%',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  comparisonImageWrapper: {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+  },
+  gestureContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  comparisonImage: {
+    width: '100%',
+    height: '100%',
+    minHeight: 300,
+  },
+  photoOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  photoDateBadge: {
+    backgroundColor: Colors.background + 'E6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  photoDateBadgeText: {
+    fontSize: FontSizes.caption,
+    fontWeight: FontWeights.medium,
+    color: Colors.primary,
+  },
+  photoWeightBadge: {
+    backgroundColor: Colors.accent + 'E6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  photoWeightBadgeText: {
+    fontSize: FontSizes.caption,
+    fontWeight: FontWeights.bold,
+    color: Colors.background,
+  },
+  comparisonHint: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: Colors.cardBackground,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+  },
+  comparisonHintText: {
+    fontSize: FontSizes.caption,
+    color: Colors.secondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 
 });
