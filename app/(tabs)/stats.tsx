@@ -6,9 +6,9 @@ import { Colors } from '@/constants/Colors';
 import { FontSizes, FontWeights } from '@/constants/Fonts';
 import { useWorkoutStore } from '@/store/workoutStore';
 import { useProgressStore } from '@/store/progressStore';
-import { BarChart3, Camera, Images as ImagesIcon, ChevronRight, Search, Activity, TrendingUp, Calendar } from 'lucide-react-native';
+import { BarChart3, Camera, Images as ImagesIcon, ChevronRight, Search, Activity, TrendingUp, Calendar, ChevronDown } from 'lucide-react-native';
 import { router } from 'expo-router';
-import BodyMap from '@/components/BodyMap';
+import BodyHeatmap from '@/components/BodyHeatmap';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 48;
@@ -124,6 +124,10 @@ export default function StatsScreen() {
     const [freqData, setFreqData] = useState<number[]>([]);
     const [freqLabels, setFreqLabels] = useState<string[]>([]);
     const [activeTab, setActiveTab] = useState<'frequent' | 'attention'>('frequent');
+    const [muscleAnalysisTimePeriod, setMuscleAnalysisTimePeriod] = useState<'week' | 'month' | '3months' | 'year'>('month');
+    const [showMuscleTimeDropdown, setShowMuscleTimeDropdown] = useState(false);
+    const [workoutInsightsTimePeriod, setWorkoutInsightsTimePeriod] = useState<'week' | 'month' | '3months' | 'year'>('month');
+    const [showWorkoutTimeDropdown, setShowWorkoutTimeDropdown] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [showExerciseDropdown, setShowExerciseDropdown] = useState(false);
@@ -181,10 +185,21 @@ export default function StatsScreen() {
 
     // --- BodyMap aggregation logic ---
     const muscleSetCounts = useMemo(() => {
-        // Only consider workouts from the last 30 days
+        // Calculate days based on selected time period
+        const getDaysForPeriod = (period: typeof muscleAnalysisTimePeriod) => {
+            switch (period) {
+                case 'week': return 7;
+                case 'month': return 30;
+                case '3months': return 90;
+                case 'year': return 365;
+                default: return 30;
+            }
+        };
+
+        const days = getDaysForPeriod(muscleAnalysisTimePeriod);
         const now = new Date();
-        const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
-        const recentWorkouts = workoutHistory.filter(w => now.getTime() - new Date(w.start_time).getTime() < THIRTY_DAYS);
+        const timeThreshold = 1000 * 60 * 60 * 24 * days;
+        const recentWorkouts = workoutHistory.filter(w => now.getTime() - new Date(w.start_time).getTime() < timeThreshold);
         const counts: Record<string, number> = {};
 
         // Helper function to validate muscle name
@@ -200,40 +215,208 @@ export default function StatsScreen() {
 
         for (const workout of recentWorkouts) {
             for (const ex of workout.exercises) {
-                const sets = ex.sets?.length || 0;
+                const completedSets = ex.sets?.filter(set => set.completed).length || 0;
                 const primary = Array.isArray(ex.exercise.primaryMuscles) ? ex.exercise.primaryMuscles : [];
                 const secondary = Array.isArray(ex.exercise.secondaryMuscles) ? ex.exercise.secondaryMuscles : [];
 
                 for (const muscle of primary) {
                     if (isValidMuscle(muscle)) {
-                        counts[muscle] = (counts[muscle] || 0) + sets;
+                        counts[muscle] = (counts[muscle] || 0) + completedSets;
                     }
                 }
                 for (const muscle of secondary) {
                     if (isValidMuscle(muscle)) {
-                        counts[muscle] = (counts[muscle] || 0) + Math.round(sets / 2); // secondary: half credit
+                        counts[muscle] = (counts[muscle] || 0) + Math.round(completedSets / 2); // secondary: half credit
                     }
                 }
             }
         }
-        return counts;
-    }, [workoutHistory]);
 
-    // --- Needs Attention logic ---
-    const allPossibleMuscles = useMemo(() => [
-        'Chest', 'Back', 'Biceps', 'Triceps', 'Shoulders', 'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Forearms', 'Traps', 'Lats', 'Adductors', 'Abductors', 'Deltoids', 'Rectus Abdominis', 'Latissimus Dorsi', 'Pectoralis Major', 'Trapezius'
-    ], []);
-    const avgSets = useMemo(() => {
-        const vals = Object.values(muscleSetCounts).filter(v => v > 0);
-        if (vals.length === 0) return 0;
-        return vals.reduce((a, b) => a + b, 0) / vals.length;
+
+        return counts;
+    }, [workoutHistory, muscleAnalysisTimePeriod]);
+
+    // --- Muscle name normalization for analysis tabs (keep detailed breakdown) ---
+    const normalizedMuscleSetCounts = useMemo(() => {
+        const muscleNormalization: Record<string, string> = {
+            // Keep detailed chest breakdown
+            'pectoralis major': 'chest',
+            'pectorals': 'chest',
+            // 'upper chest' and 'lower chest' stay as-is
+
+            // Keep detailed shoulder breakdown  
+            'anterior deltoid': 'front delt',
+            'lateral deltoid': 'side delt',
+            'posterior deltoid': 'rear delt',
+            'front deltoids': 'front delt',
+            'rear deltoids': 'rear delt',
+            'deltoids': 'shoulders', // generic deltoids → shoulders
+
+            // Back normalization
+            'trapezius': 'traps',
+            'latissimus dorsi': 'lats',
+            'rhomboids': 'upper back',
+            'middle trapezius': 'upper back',
+            'lower trapezius': 'upper back',
+            'erector spinae': 'lower back',
+
+            // Core normalization
+            'rectus abdominis': 'abs',
+            'abdominals': 'abs',
+            'external obliques': 'obliques',
+            'internal obliques': 'obliques',
+
+            // Arms normalization
+            'biceps brachii': 'biceps',
+            'triceps brachii': 'triceps',
+            'forearm': 'forearms',
+
+            // Legs normalization
+            'quadriceps': 'quads',
+            'rectus femoris': 'quads',
+            'vastus lateralis': 'quads',
+            'vastus medialis': 'quads',
+            'biceps femoris': 'hamstrings',
+            'semitendinosus': 'hamstrings',
+            'semimembranosus': 'hamstrings',
+            'gluteus maximus': 'glutes',
+            'gluteus medius': 'glutes',
+            'gastrocnemius': 'calves',
+            'soleus': 'calves',
+        };
+
+        const normalized: Record<string, number> = {};
+
+        for (const [muscle, count] of Object.entries(muscleSetCounts)) {
+            const normalizedName = muscleNormalization[muscle.toLowerCase()] || muscle.toLowerCase();
+            normalized[normalizedName] = (normalized[normalizedName] || 0) + count;
+        }
+
+
+
+        return normalized;
     }, [muscleSetCounts]);
-    const needsAttention = useMemo(() => {
-        return allPossibleMuscles.filter(muscle => {
-            const count = muscleSetCounts[muscle] || muscleSetCounts[muscle.toLowerCase()] || 0;
-            return count === 0 || (avgSets > 0 && count < avgSets * 0.5);
-        });
-    }, [muscleSetCounts, avgSets, allPossibleMuscles]);
+
+    // --- Statistical analysis for Needs Attention ---
+    const { frequentlyWorked, needsAttention } = useMemo(() => {
+        const counts = Object.values(normalizedMuscleSetCounts);
+
+        if (counts.length === 0) {
+            return { frequentlyWorked: [], needsAttention: [] };
+        }
+
+        // Calculate mean
+        const mean = counts.reduce((sum, count) => sum + count, 0) / counts.length;
+
+        // Threshold: 2 sets below the mean
+        const threshold = Math.max(0, mean - 2);
+
+        // Frequently Worked: muscles at or above (mean - 2 sets)
+        const frequent = Object.entries(normalizedMuscleSetCounts)
+            .filter(([, count]) => count >= threshold)
+            .sort(([, a], [, b]) => b - a)
+            .map(([muscle, count]) => ({ muscle, count }));
+
+        // Needs Attention: muscles below (mean - 2 sets)
+        const attention = Object.entries(normalizedMuscleSetCounts)
+            .filter(([, count]) => count < threshold)
+            .sort(([, a], [, b]) => a - b) // Sort by lowest count first
+            .map(([muscle]) => muscle);
+
+        return { frequentlyWorked: frequent, needsAttention: attention };
+    }, [normalizedMuscleSetCounts]);
+
+    // --- Body Heatmap muscle mapping ---
+    const bodyHeatmapData = useMemo(() => {
+        // Map exercise muscle names to body heatmap muscle groups
+        const muscleMapping: Record<string, string> = {
+            // Head & Neck
+            'head': 'head',
+            'neck': 'neck',
+
+            // Chest - detailed breakdown
+            'upper chest': 'chest',
+            'lower chest': 'chest',
+            'chest': 'chest',
+            'pectoralis major': 'chest',
+            'pectorals': 'chest',
+
+            // Shoulders - detailed breakdown
+            'front delt': 'shoulders',
+            'side delt': 'shoulders',
+            'rear delt': 'shoulders',
+            'anterior deltoid': 'shoulders',
+            'lateral deltoid': 'shoulders',
+            'posterior deltoid': 'shoulders',
+            'front deltoids': 'shoulders',
+            'rear deltoids': 'shoulders',
+            'deltoids': 'shoulders',
+            'shoulders': 'shoulders',
+
+            // Arms
+            'biceps': 'biceps',
+            'biceps brachii': 'biceps',
+            'triceps': 'triceps',
+            'triceps brachii': 'triceps',
+            'forearms': 'forearms',
+            'forearm': 'forearms',
+
+            // Back
+            'latissimus dorsi': 'lats',
+            'lats': 'lats',
+            'trapezius': 'traps',
+            'traps': 'traps',
+            'rhomboids': 'upperBack',
+            'middle trapezius': 'upperBack',
+            'lower trapezius': 'upperBack',
+            'erector spinae': 'lowerBack',
+            'lower back': 'lowerBack',
+
+            // Core
+            'abdominals': 'abs',
+            'rectus abdominis': 'abs',
+            'abs': 'abs',
+            'obliques': 'obliques',
+            'external obliques': 'obliques',
+            'internal obliques': 'obliques',
+
+            // Legs
+            'quadriceps': 'quads',
+            'quads': 'quads',
+            'rectus femoris': 'quads',
+            'vastus lateralis': 'quads',
+            'vastus medialis': 'quads',
+            'hamstrings': 'hamstrings',
+            'biceps femoris': 'hamstrings',
+            'semitendinosus': 'hamstrings',
+            'semimembranosus': 'hamstrings',
+            'glutes': 'glutes',
+            'gluteus maximus': 'glutes',
+            'gluteus medius': 'glutes',
+            'calves': 'calves',
+            'gastrocnemius': 'calves',
+            'soleus': 'calves',
+
+            // Additional mappings
+            'adductors': 'abductors',
+            'abductors': 'abductors',
+            'hip abductors': 'abductors',
+            'hip adductors': 'abductors',
+            'knees': 'knees',
+        };
+
+        const mappedData: Record<string, number> = {};
+
+        // Map muscle set counts to body heatmap muscle groups
+        for (const [muscleName, setCount] of Object.entries(normalizedMuscleSetCounts)) {
+            const mappedMuscle = muscleMapping[muscleName.toLowerCase()];
+            if (mappedMuscle) {
+                mappedData[mappedMuscle] = (mappedData[mappedMuscle] || 0) + setCount;
+            }
+        }
+
+        return mappedData;
+    }, [normalizedMuscleSetCounts]);
 
     // Map set counts to color intensity (light blue to dark blue)
     const muscleColors = useMemo(() => {
@@ -323,23 +506,7 @@ export default function StatsScreen() {
         }
     }, [selectedExerciseId, selectedRepCount, selectedTimePeriod, workoutHistory]);
 
-    // For 'Frequently Worked', show all muscle groups sorted by set count
-    const frequentlyWorked = useMemo(() => {
-        return Object.entries(muscleSetCounts)
-            .filter(([muscle, count]) => {
-                // Additional validation to ensure we only show valid muscle names
-                return typeof muscle === 'string' &&
-                    muscle.trim().length > 0 &&
-                    muscle !== '{}' &&
-                    muscle !== 'null' &&
-                    muscle !== 'undefined' &&
-                    !muscle.includes('{') &&
-                    !muscle.includes('}') &&
-                    count > 0;
-            })
-            .sort((a, b) => b[1] - a[1])
-            .map(([muscle, count]) => ({ muscle, count }));
-    }, [muscleSetCounts]);
+
 
     // Filtered exercises for search
     const filteredExercises = useMemo(() => {
@@ -383,7 +550,77 @@ export default function StatsScreen() {
                                         <Activity size={22} color={Colors.accent} />
                                     </View>
                                     <Text style={styles.enhancedSectionTitle}>Muscle Groups Analysis</Text>
+
+                                    {/* Time Period Filter in top right corner */}
+                                    <TouchableOpacity
+                                        style={{
+                                            marginLeft: 'auto',
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            backgroundColor: Colors.cardBackground,
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 4,
+                                            borderRadius: 6,
+                                            borderWidth: 1,
+                                            borderColor: Colors.divider,
+                                            minWidth: 50
+                                        }}
+                                        onPress={() => setShowMuscleTimeDropdown(!showMuscleTimeDropdown)}
+                                    >
+                                        <Text style={{ fontSize: 12, color: '#FFFFFF', marginRight: 4 }}>
+                                            {muscleAnalysisTimePeriod === 'week' ? '1W' :
+                                                muscleAnalysisTimePeriod === 'month' ? '1M' :
+                                                    muscleAnalysisTimePeriod === '3months' ? '3M' : '1Y'}
+                                        </Text>
+                                        <ChevronDown size={12} color={Colors.secondary} />
+                                    </TouchableOpacity>
                                 </View>
+
+                                {showMuscleTimeDropdown && (
+                                    <View style={{
+                                        position: 'absolute',
+                                        top: 35,
+                                        right: 0,
+                                        backgroundColor: Colors.cardBackground,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: Colors.divider,
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: 0.1,
+                                        shadowRadius: 4,
+                                        elevation: 3,
+                                        zIndex: 1000,
+                                        width: 120
+                                    }}>
+                                        {[
+                                            { value: 'week' as const, label: 'Past Week' },
+                                            { value: 'month' as const, label: 'Past Month' },
+                                            { value: '3months' as const, label: 'Past 3 Months' },
+                                            { value: 'year' as const, label: 'Past Year' }
+                                        ].map(option => (
+                                            <TouchableOpacity
+                                                key={option.value}
+                                                style={{
+                                                    padding: 10,
+                                                    borderBottomWidth: option.value !== 'year' ? 1 : 0,
+                                                    borderBottomColor: Colors.divider
+                                                }}
+                                                onPress={() => {
+                                                    setMuscleAnalysisTimePeriod(option.value);
+                                                    setShowMuscleTimeDropdown(false);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    { fontSize: 14, color: '#FFFFFF' },
+                                                    muscleAnalysisTimePeriod === option.value && { color: Colors.accent, fontWeight: '600' }
+                                                ]}>
+                                                    {option.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
                                 <View style={{ flexDirection: 'row', borderRadius: 8, overflow: 'hidden', marginBottom: 12, backgroundColor: Colors.cardBackground }}>
                                     <TouchableOpacity
                                         style={{ flex: 1, paddingVertical: 10, backgroundColor: activeTab === 'frequent' ? Colors.accent : 'transparent', alignItems: 'center' }}
@@ -397,6 +634,7 @@ export default function StatsScreen() {
                                     >
                                         <Text style={{ color: activeTab === 'attention' ? Colors.primary : Colors.secondary, fontWeight: '600' }}>Needs Attention</Text>
                                     </TouchableOpacity>
+
                                 </View>
                                 {activeTab === 'frequent' ? (
                                     <ScrollView style={{ maxHeight: 220 }}>
@@ -414,13 +652,21 @@ export default function StatsScreen() {
                                         {needsAttention.length > 0 ? needsAttention.map(muscle => (
                                             <View key={muscle} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.divider }}>
                                                 <Text style={{ fontSize: 16, color: '#fff', fontWeight: '600' }}>{muscle}</Text>
-                                                <Text style={{ fontSize: 16, color: Colors.warning || '#ff9800', fontWeight: '600' }}>{muscleSetCounts[muscle] || muscleSetCounts[muscle.toLowerCase()] || 0} sets</Text>
+                                                <Text style={{ fontSize: 16, color: Colors.warning || '#ff9800', fontWeight: '600' }}>{normalizedMuscleSetCounts[muscle] || 0} sets</Text>
                                             </View>
                                         )) : (
                                             <Text style={{ color: Colors.secondary, textAlign: 'center', marginTop: 16 }}>All muscle groups are being worked well!</Text>
                                         )}
                                     </ScrollView>
                                 )}
+
+                                {/* Body Heatmap - Below the tabs within Muscle Groups Analysis */}
+                                <View style={{ marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: Colors.divider }}>
+                                    <BodyHeatmap
+                                        muscleData={bodyHeatmapData}
+                                        showLabels={false}
+                                    />
+                                </View>
                             </View>
                             {/* Exercise Progress Analysis */}
                             <View style={styles.enhancedSection}>
@@ -610,20 +856,138 @@ export default function StatsScreen() {
                                     </View>
                                 )}
                             </View>
-                            {/* Workout Frequency Chart */}
+                            {/* Workout Insights */}
                             <View style={styles.enhancedSection}>
                                 <View style={styles.sectionHeaderWithIcon}>
                                     <View style={styles.sectionIconContainer}>
-                                        <Calendar size={22} color={Colors.accent} />
+                                        <TrendingUp size={22} color={Colors.accent} />
                                     </View>
-                                    <Text style={styles.enhancedSectionTitle}>Workout Frequency (Last 4 Weeks)</Text>
+                                    <Text style={styles.enhancedSectionTitle}>Workout Insights</Text>
+
+                                    {/* Time Period Filter in top right corner */}
+                                    <TouchableOpacity
+                                        style={{
+                                            marginLeft: 'auto',
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            backgroundColor: Colors.cardBackground,
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 4,
+                                            borderRadius: 6,
+                                            borderWidth: 1,
+                                            borderColor: Colors.divider,
+                                            minWidth: 50
+                                        }}
+                                        onPress={() => setShowWorkoutTimeDropdown(!showWorkoutTimeDropdown)}
+                                    >
+                                        <Text style={{ fontSize: 12, color: '#FFFFFF', marginRight: 4 }}>
+                                            {workoutInsightsTimePeriod === 'week' ? '1W' :
+                                                workoutInsightsTimePeriod === 'month' ? '1M' :
+                                                    workoutInsightsTimePeriod === '3months' ? '3M' : '1Y'}
+                                        </Text>
+                                        <ChevronDown size={12} color={Colors.secondary} />
+                                    </TouchableOpacity>
                                 </View>
-                                <BarChart
-                                    data={freqData}
-                                    labels={freqLabels}
-                                    color={Colors.primary}
-                                    label="Workouts per Week"
-                                />
+
+                                {showWorkoutTimeDropdown && (
+                                    <View style={{
+                                        position: 'absolute', top: 35, right: 0,
+                                        backgroundColor: Colors.cardBackground, borderRadius: 8, borderWidth: 1,
+                                        borderColor: Colors.divider, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, zIndex: 1000, width: 120
+                                    }}>
+                                        {[
+                                            { value: 'week' as const, label: 'Past Week' },
+                                            { value: 'month' as const, label: 'Past Month' },
+                                            { value: '3months' as const, label: 'Past 3 Months' },
+                                            { value: 'year' as const, label: 'Past Year' }
+                                        ].map(option => (
+                                            <TouchableOpacity
+                                                key={option.value}
+                                                style={{ padding: 10, borderBottomWidth: option.value !== 'year' ? 1 : 0, borderBottomColor: Colors.divider }}
+                                                onPress={() => {
+                                                    setWorkoutInsightsTimePeriod(option.value);
+                                                    setShowWorkoutTimeDropdown(false);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    { fontSize: 14, color: '#FFFFFF' },
+                                                    workoutInsightsTimePeriod === option.value && { color: Colors.accent, fontWeight: '600' }
+                                                ]}>
+                                                    {option.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+
+                                <View style={styles.insightsGrid}>
+                                    {/* Total Workouts */}
+                                    <View style={styles.insightCard}>
+                                        <Text style={styles.insightLabel}>Total Workouts</Text>
+                                        <Text style={styles.insightValue}>
+                                            {(() => {
+                                                const getDaysForPeriod = (period: typeof workoutInsightsTimePeriod) => {
+                                                    switch (period) {
+                                                        case 'week': return 7;
+                                                        case 'month': return 30;
+                                                        case '3months': return 90;
+                                                        case 'year': return 365;
+                                                        default: return 30;
+                                                    }
+                                                };
+                                                const days = getDaysForPeriod(workoutInsightsTimePeriod);
+                                                const now = new Date();
+                                                const timeThreshold = 1000 * 60 * 60 * 24 * days;
+
+                                                return workoutHistory.filter(w =>
+                                                    now.getTime() - new Date(w.start_time).getTime() < timeThreshold
+                                                ).length;
+                                            })()}
+                                        </Text>
+                                        <Text style={styles.insightSubtext}>
+                                            {workoutInsightsTimePeriod === 'week' ? 'this week' :
+                                                workoutInsightsTimePeriod === 'month' ? 'this month' :
+                                                    workoutInsightsTimePeriod === '3months' ? 'past 3 months' : 'this year'}
+                                        </Text>
+                                    </View>
+
+                                    {/* Average Duration */}
+                                    <View style={styles.insightCard}>
+                                        <Text style={styles.insightLabel}>Avg Duration</Text>
+                                        <Text style={styles.insightValue}>
+                                            {(() => {
+                                                const getDaysForPeriod = (period: typeof workoutInsightsTimePeriod) => {
+                                                    switch (period) {
+                                                        case 'week': return 7;
+                                                        case 'month': return 30;
+                                                        case '3months': return 90;
+                                                        case 'year': return 365;
+                                                        default: return 30;
+                                                    }
+                                                };
+                                                const days = getDaysForPeriod(workoutInsightsTimePeriod);
+                                                const now = new Date();
+                                                const timeThreshold = 1000 * 60 * 60 * 24 * days;
+
+                                                const filteredWorkouts = workoutHistory.filter(w => {
+                                                    const withinTime = now.getTime() - new Date(w.start_time).getTime() < timeThreshold;
+                                                    return withinTime && w.end_time;
+                                                });
+
+                                                if (filteredWorkouts.length === 0) return '0';
+
+                                                const totalMinutes = filteredWorkouts.reduce((sum, w) => {
+                                                    const duration = (new Date(w.end_time!).getTime() - new Date(w.start_time).getTime()) / (1000 * 60);
+                                                    return sum + duration;
+                                                }, 0);
+
+                                                return Math.round(totalMinutes / filteredWorkouts.length);
+                                            })()}
+                                        </Text>
+                                        <Text style={styles.insightSubtext}>minutes</Text>
+                                    </View>
+                                </View>
                             </View>
                             {/* Progress Photos */}
                             <View style={styles.enhancedSection}>
@@ -1404,6 +1768,39 @@ const styles = StyleSheet.create({
     },
     xAxisText: {
         fontSize: 9,
+        color: Colors.secondary,
+        textAlign: 'center',
+    },
+    // New Insights Grid Styles
+    insightsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+    },
+    insightCard: {
+        backgroundColor: Colors.background,
+        borderRadius: 12,
+        padding: 20,
+        width: '48%',
+        marginBottom: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: Colors.divider,
+    },
+    insightLabel: {
+        fontSize: 12,
+        color: Colors.secondary,
+        marginBottom: 4,
+        textAlign: 'center',
+    },
+    insightValue: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: Colors.accent,
+        marginBottom: 2,
+    },
+    insightSubtext: {
+        fontSize: 11,
         color: Colors.secondary,
         textAlign: 'center',
     },
